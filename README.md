@@ -2,11 +2,16 @@
 
 > 把 dsh（DeepSeek Harness）的会话，装进一个常驻桌面的可缩放气泡窗口。
 
+<h3 align="center">
+  <a href="https://github.com/xuxian1992/desktop-bubble/releases/latest/download/desktop-bubble-1.0.0-win-x64.zip">⬇️ 下载 Windows 免安装版（133 MB）</a>
+</h3>
+
+<p align="center">
+  解压后双击 <code>START.vbs</code>，不需要安装，删目录即卸载<br>
+  <sub>也提供 <a href="https://github.com/xuxian1992/desktop-bubble/releases/latest/download/desktop-bubble-1.0.0-win-x64-setup.exe">安装包 exe（98 MB）</a> · <a href="https://github.com/xuxian1992/desktop-bubble/releases">全部版本</a></sub>
+</p>
+
 ![侧边栏与 Markdown](docs/screenshot-sidebar.png)
-
-## 下载
-
-**[→ Releases](https://github.com/xuxian1992/desktop-bubble/releases)** · 免安装版，解压后双击 `START.vbs`
 
 ## 这是什么
 
