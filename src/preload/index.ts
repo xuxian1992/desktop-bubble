@@ -39,6 +39,8 @@ const api: BubbleApi = {
   prompt: (text: string, attachments?: Attachment[]) =>
     invoke('dsh:prompt', text, attachments) as Promise<void>,
   cancel: () => invoke('dsh:cancel') as Promise<void>,
+  runCommand: (line: string) =>
+    invoke('dsh:command', line) as Promise<{ ok: boolean; error?: string }>,
   refresh: () => invoke('dsh:refresh') as Promise<void>,
   answerInbox: (itemId: string, answer: InboxAnswer) =>
     invoke('dsh:answerInbox', itemId, answer) as Promise<void>,

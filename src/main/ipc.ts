@@ -57,6 +57,8 @@ export function registerIpc(store: SessionStore): void {
   ipcMain.handle('dsh:prompt', (_e, text: string, attachments?: Attachment[]) =>
     store.prompt(text, attachments ?? []))
   ipcMain.handle('dsh:cancel', () => store.cancel())
+  // 执行一条斜杠命令（权限档位切换走这里，不是 prompt）
+  ipcMain.handle('dsh:command', (_e, line: string) => store.runCommand(line))
   ipcMain.handle('dsh:refresh', () => store.syncList())
   ipcMain.handle('dsh:answerInbox', (_e, id: string, answer: InboxAnswer) => store.answerInbox(id, answer))
   ipcMain.handle('dsh:recentCwds', () => store.recentCwds())

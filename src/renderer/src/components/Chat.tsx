@@ -6,6 +6,7 @@ import { FORM_SIZES, MONITOR_LABELS } from '@shared/types'
 import { Markdown } from './Markdown'
 import { InboxBar } from './InboxBar'
 import { SessionSidebar } from './SessionSidebar'
+import { DshMissing } from './DshMissing'
 
 const FORM_LABEL: Record<FormFactor, string> = { capsule: '胶囊', bubble: '气泡', panel: '面板' }
 
@@ -34,6 +35,7 @@ async function fileToBase64(f: File): Promise<string> {
 
 export function Chat({
   snap, state, config, perception, onOpenSettings, onOpenLink, onCopy,
+  dshMissing, onDshReady,
 }: {
   snap: Snapshot | null
   state: BubbleState
@@ -41,11 +43,14 @@ export function Chat({
   perception: PerceptionView | null
   onOpenSettings: () => void
   onOpenLink: (url: string) => void
+  /** 没检测到 dsh —— 在聊天流里说这件事，而不是另加一条横幅 */
+  dshMissing?: boolean
+  onDshReady?: () => void
   onCopy: (text: string) => void
 }) {
   const [draft, setDraft] = useState('')
   const [attach, setAttach] = useState<Attachment[]>([])
-  const [pop, setPop] = useState<null | 'cap' | 'file' | 'more' | 'model' | 'effort' | 'mon'>(null)
+  const [pop, setPop] = useState<null | 'cap' | 'file' | 'more' | 'model' | 'effort' | 'mon' | 'perm'>(null)
   const [busy, setBusy] = useState(false)
   const [dropping, setDropping] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -314,7 +319,9 @@ export function Chat({
         {snap ? <InboxBar snap={snap} /> : null}
 
         <div className="msgs" ref={scrollRef}>
-          {bus?.state === 'error' ? (
+          {dshMissing ? (
+            <DshMissing onReady={() => onDshReady?.()} />
+          ) : bus?.state === 'error' ? (
             <div className="empty-hint">⚠ 连不上 dsh<br />{bus.detail ?? ''}</div>
           ) : !cur || cur.loading ? (
             <div className="empty-hint">载入中…</div>
@@ -404,6 +411,44 @@ export function Chat({
                 </div>
               ) : null}
             </span>
+            {/* 权限档位 —— 读会话投影、写 /permission 命令，和 dsh 网页版同一条路 */}
+            {cur?.permissions ? (
+              <span className="chipwrap">
+                <span
+                  className={
+                    'chipbtn' +
+                    (pop === 'perm' ? ' on' : '') +
+                    (cur.permissions.currentValue === 'danger-full-access' ? ' warn' : '')
+                  }
+                  onClick={() => setPop(pop === 'perm' ? null : 'perm')}
+                  title={'权限档位：' + permHint(cur.permissions.currentValue)}
+                >
+                  权限 <b>{permLabel(cur.permissions.currentValue)}</b>
+                </span>
+                {pop === 'perm' ? (
+                  <div className="pop anchored" style={{ width: 226 }}>
+                    <div className="hd">权限档位</div>
+                    {cur.permissions.options.map((o) => (
+                      <div
+                        key={o.value}
+                        className={'row' + (o.value === cur.permissions?.currentValue ? ' sel' : '')}
+                        onClick={() => {
+                          setPop(null)
+                          // 走 commands/execute，不是 prompt —— 实测 prompt 发文本命令不会被执行
+                          void window.bubble.runCommand('/permission ' + o.value)
+                        }}
+                      >
+                        <div className="t">
+                          {permLabel(o.value)}
+                          <small>{permHint(o.value)}</small>
+                        </div>
+                        {o.value === cur.permissions?.currentValue ? <span className="ck">✓</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </span>
+            ) : null}
             <span className="right" />
           </div>
 
@@ -447,6 +492,26 @@ export function Chat({
       />
     </>
   )
+}
+
+/**
+ * 权限档位的中文名与一句话说明。
+ *
+ * dsh 给的是 kebab-case 的机制名（那个名字描述的是 sandbox 模式，不是用户能懂的话），
+ * 所以这里翻译成人话 —— 尤其最后一个是危险的，必须让用户一眼看出后果。
+ */
+function permLabel(v: string): string {
+  if (v === 'read-only') return '只读'
+  if (v === 'workspace-write') return '工作区写入'
+  if (v === 'danger-full-access') return '完全访问'
+  return v
+}
+
+function permHint(v: string): string {
+  if (v === 'read-only') return '只能看，不能改任何文件'
+  if (v === 'workspace-write') return '可改工作目录内的文件，动外面会先问你'
+  if (v === 'danger-full-access') return '什么都能做，不再询问'
+  return ''
 }
 
 function effortLabel(id?: string): string {

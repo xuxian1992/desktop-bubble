@@ -196,6 +196,22 @@ export interface SessionView {
   hasMore: boolean
   tokens?: TokenStats
   context?: ContextStats
+  permissions?: PermissionStats
+}
+
+/* ---------------- 权限档位 ---------------- */
+
+/**
+ * dsh 的「权限档位」：把 sandbox 模式与审批策略打包成一个用户看得懂的名字。
+ *
+ * 会话创建时就钉死了，之后改只影响那个会话（不是全局设置）——
+ * 所以它读的是会话投影，写的是发一条 /permission 命令。
+ */
+export interface PermissionOption { value: string; name: string }
+
+export interface PermissionStats {
+  options: PermissionOption[]
+  currentValue: string
 }
 
 /* ---------------- 屏幕感知 ---------------- */
@@ -305,6 +321,8 @@ export interface BubbleApi {
   forkSession(sessionId: string): Promise<void>
   prompt(text: string, attachments?: Attachment[]): Promise<void>
   cancel(): Promise<void>
+  /** 执行一条斜杠命令（权限档位切换走这里 —— 实测 prompt 发文本不会执行命令） */
+  runCommand(line: string): Promise<{ ok: boolean; error?: string }>
   refresh(): Promise<void>
   answerInbox(itemId: string, answer: InboxAnswer): Promise<void>
 

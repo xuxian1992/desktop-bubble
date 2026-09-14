@@ -12,22 +12,38 @@ export default function App() {
   const [state, setState] = useState<BubbleState | null>(null)
   const [config, setConfig] = useState<BubbleConfig | null>(null)
   const [view, setView] = useState<'chat' | 'settings' | 'firstrun'>('chat')
+  /** dsh 缺失且已经过了首次运行 —— 常驻提示，否则用户永远没机会装 */
+  const [needDsh, setNeedDsh] = useState(false)
   const [prevForm, setPrevForm] = useState<FormFactor>('bubble')
   const [prevSidebar, setPrevSidebar] = useState(false)
   const snap = useSnapshot()
   const perception = usePerception()
 
+  /**
+   * 查运行环境，决定要不要把「缺 dsh」摆到用户面前。
+   *
+   * ⚠️ 以前这段只在 `!setupDone` 时跑 —— 结果是：**向导只要走过一次**（哪怕点了「稍后再说」），
+   * 之后再也不会检测，用户永远没有机会装 dsh。这是真事：有人在笔记本上装了 Node、
+   * 却始终没装上 dsh，因为向导再也没出现过。
+   *
+   * 现在改成每次启动都查：没走过向导 → 完整向导；走过了但仍缺 dsh → 常驻提示条。
+   */
+  const probeEnv = useCallback(async (setupDone: boolean) => {
+    const r = await window.bubble.probeRuntime()
+    if (r.dsh.found) {
+      setNeedDsh(false)
+      if (!setupDone) void window.bubble.patchConfig({ setupDone: true }).then(setConfig)
+      return
+    }
+    if (!setupDone) setView('firstrun')
+    else setNeedDsh(true)
+  }, [])
+
   useEffect(() => {
     void window.bubble.getState().then(setState)
     void window.bubble.getConfig().then((c) => {
       setConfig(c)
-      // 首次运行且还没走过向导 → 先检查 dsh 在不在
-      if (!c.setupDone) {
-        void window.bubble.probeDsh().then((p) => {
-          setView(p.found ? 'chat' : 'firstrun')
-          if (p.found) void window.bubble.patchConfig({ setupDone: true }).then(setConfig)
-        })
-      }
+      void probeEnv(c.setupDone)
     })
     return window.bubble.onStateChanged(setState)
   }, [])
@@ -65,6 +81,8 @@ export default function App() {
           void window.bubble.patchConfig({ setupDone: true }).then(setConfig)
           setView('chat')
           if (!skip) void window.bubble.refresh()
+          // 装完再查一次：装上了就把提示条收掉
+          setTimeout(() => void probeEnv(true), 800)
         }} />
         <ResizeHandles />
       </div>
@@ -93,6 +111,8 @@ export default function App() {
           onOpenSettings={openSettings}
           onOpenLink={(u) => void window.bubble.openExternal(u)}
           onCopy={(t) => void window.bubble.copyText(t)}
+          dshMissing={needDsh}
+          onDshReady={() => void probeEnv(true)}
         />
       )}
       <ResizeHandles />

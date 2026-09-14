@@ -80,17 +80,68 @@ export async function resolveNodeExe(): Promise<string> {
   return 'node'
 }
 
+/**
+ * 找系统里的 node.exe —— **不只靠 PATH**。
+ *
+ * 为什么要这么麻烦：Node.js 装完之后，**已经在跑的进程不会自动看到新 PATH**。
+ * 而气泡可能是从 VBS 启动的，继承的是 explorer 的环境 —— 用户刚装完 Node，
+ * 应用眼里却「没有 npm」，于是「点了我装」但命令根本找不到。
+ * 所以这里多探几个常见安装位置，拿到绝对路径绕开 PATH。
+ */
+async function resolveSystemNode(): Promise<string | null> {
+  const out = await tryRun(process.platform === 'win32' ? 'where' : 'which', ['node'], 12000)
+  if (out) {
+    const first = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0]
+    if (first && existsSync(first)) return first
+  }
+  const candidates = process.platform === 'win32'
+    ? [
+        join(process.env.ProgramFiles ?? 'C:\\Program Files', 'nodejs', 'node.exe'),
+        join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'nodejs', 'node.exe'),
+        join(process.env.LOCALAPPDATA ?? '', 'Programs', 'nodejs', 'node.exe'),
+      ]
+    : ['/usr/local/bin/node', '/opt/homebrew/bin/node', '/usr/bin/node']
+  for (const p of candidates) {
+    try { if (p && existsSync(p)) return p } catch { /* 跳过 */ }
+  }
+  return null
+}
+
+export interface NpmInvocation { cmd: string; args: string[]; shell: boolean; label: string }
+
+/**
+ * 决定「怎么调 npm」。
+ *
+ * 优先用 `node.exe + npm-cli.js` 的绝对路径形式：
+ *   · 不依赖 PATH（解决刚装完 Node 的进程看不到 npm）
+ *   · 不经过 shell（没有引号转义问题，也没有 .cmd 的 spawn EINVAL）
+ * 实在找不到 node 才退回裸 `npm`。
+ */
+export async function resolveNpmInvocation(): Promise<NpmInvocation> {
+  const portable = findPortableNode()
+  if (portable) {
+    const cli = npmCliJs(portable)
+    if (existsSync(cli)) return { cmd: portable, args: [cli], shell: false, label: '便携版 npm' }
+  }
+  const sys = await resolveSystemNode()
+  if (sys) {
+    const cli = npmCliJs(sys)
+    if (existsSync(cli)) return { cmd: sys, args: [cli], shell: false, label: '系统 npm（绝对路径）' }
+  }
+  return { cmd: 'npm', args: [], shell: true, label: 'PATH 上的 npm' }
+}
+
 export interface NpmProbe { found: boolean; version?: string; source?: 'path' | 'portable' }
 
 /** 装 dsh 要靠 npm —— 新机器上很可能是没有的，得单独探一下给出人话提示 */
 export async function probeNpm(): Promise<NpmProbe> {
-  const v = await tryRun('npm', ['--version'], 15000)
-  if (v !== null) return { found: true, version: v.trim().split(/\s+/).pop(), source: 'path' }
-  // 系统没有 → 认我们帮装的便携版
-  const node = findPortableNode()
-  if (node) {
-    const pv = await tryRun(node, [npmCliJs(node), '--version'], 20000)
-    if (pv !== null) return { found: true, version: pv.trim().split(/\s+/).pop(), source: 'portable' }
+  // 先用绝对路径形式探（不依赖 PATH）
+  const inv = await resolveNpmInvocation()
+  const v = await tryRun(inv.cmd, [...inv.args, '--version'], 20000)
+  if (v !== null) {
+    const ver = v.trim().split(/\s+/).pop()
+    if (inv.label.includes('便携')) return { found: true, version: ver, source: 'portable' }
+    return { found: true, version: ver, source: 'path' }
   }
   return { found: false }
 }
@@ -149,26 +200,18 @@ export function installDsh(onLine: (line: string) => void, onDone: (ok: boolean,
     let args: string[]
     let useShell: boolean
 
-    if (sys.found && sys.source !== 'portable') {
-      onLine('使用系统 npm' + (sys.version ? ' v' + sys.version : ''))
-      cmd = 'npm'
-      args = ['install', '-g', '@deepseek-ai/dsh']
-      useShell = true
-    } else {
-      // ② 系统没有 → 用便携 node 跑 npm-cli.js
-      //
-      // ⚠️ 便携这条**不能** spawn npm.cmd：Node 20+ 出于安全直接拒绝（实测 spawn EINVAL）。
-      //    改成 node.exe + npm-cli.js 后既绕开 .cmd，也不经过 shell，没有转义问题。
-      const node = findPortableNode()
-      if (!node) {
-        onDone(false, '系统里没有 npm，也没有便携版 Node.js —— 请先安装 Node.js')
-        return
-      }
-      onLine('使用便携版 Node.js：' + node)
-      cmd = node
-      args = [npmCliJs(node), 'install', '-g', '@deepseek-ai/dsh']
-      useShell = false
-    }
+    // 统一走「解析出的 npm 调用方式」：
+    //   node.exe + npm-cli.js 的绝对路径形式，不依赖 PATH、不经过 shell。
+    //
+    // ⚠️ 两条都不能用：
+    //   · spawn('npm', …, {shell:true}) —— 依赖 PATH，刚装完 Node 的进程可能看不到 npm
+    //   · spawn('npm.cmd', …) 不带 shell —— Node 20+ 直接拒绝（实测 spawn EINVAL）
+    const inv = await resolveNpmInvocation()
+    onLine('使用 ' + inv.label + (sys.version ? ' v' + sys.version : ''))
+    onLine('  命令: ' + inv.cmd + ' ' + inv.args.join(' '))
+    cmd = inv.cmd
+    args = [...inv.args, 'install', '-g', '@deepseek-ai/dsh']
+    useShell = inv.shell
 
     try {
       installing = spawn(cmd, args, {

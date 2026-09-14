@@ -2,7 +2,7 @@ import type { DshClient } from '../dsh/client'
 import type { MuxFrame, RawSessionSummary, SessionEventEnvelope } from '../../shared/dsh'
 import type {
   Attachment, ChatRow, ContextStats, InboxAnswer, InboxItem, ModelCatalogView, ModelGroup,
-  SessionStatus, SessionSummary, SessionView, Snapshot, TokenStats, WorkspaceSummary,
+  PermissionStats, SessionStatus, SessionSummary, SessionView, Snapshot, TokenStats, WorkspaceSummary,
 } from '../../shared/types'
 
 /** 一个会话的本地状态。rows 是**聚合后**的可渲染单元，不是原始事件。 */
@@ -23,6 +23,7 @@ interface SessionRecord {
   running: boolean
   tokens?: TokenStats
   context?: ContextStats
+  permissions?: PermissionStats
 }
 
 const HISTORY_WINDOW = 14 // 气泡首屏窗口，比 web 端的 50 小得多（见方案 §14.4）
@@ -258,11 +259,40 @@ export class SessionStore {
         if (tu) rec.tokens = { input: tu.uncachedInputTokens ?? 0, output: tu.outputTokens ?? 0, cacheRead: tu.cacheReadTokens ?? 0 }
         const cp = vals.contextPressure
         if (cp) rec.context = { used: cp.pressureTokens ?? 0, window: cp.contextWindow ?? 0 }
+        // 权限档位：会话投影直接给了「全部选项 + 当前值」，照搬即可
+        const pm = vals.permissions
+        if (pm && Array.isArray(pm.options) && pm.currentValue) {
+          rec.permissions = { options: pm.options, currentValue: String(pm.currentValue) }
+        }
       }
     }
     this.summaries.clear()
     for (const [k, v] of next) this.summaries.set(k, v)
     this.notify(0)
+  }
+
+  /**
+   * 在**当前会话**上执行一条斜杠命令（如 `/permission workspace-write`）。
+   *
+   * 为什么不能用 session.prompt 发这条文本：实测过 —— prompt 只是把文字发给模型，
+   * 命令根本不会被执行（档位纹丝不动）。命令走的是另一条通道：
+   *
+   *   POST /api/commands/execute
+   *   { args: { agentId, line, images: [] } }
+   *
+   * 参数必须包在 args 里，否则报「Remote payload must contain exactly one plain-object args field」。
+   * 这是从 dsh-client-runtime 的 client.js 里挖出来的（它内部叫 remote.commands.execute）。
+   */
+  async runCommand(line: string): Promise<{ ok: boolean; error?: string }> {
+    const sessionId = this.currentId
+    if (!sessionId) return { ok: false, error: '没有当前会话' }
+    const res = await this.client.call<{ result?: { kind: string; text?: string } }>('commands/execute', {
+      args: { agentId: sessionId, line, images: [] },
+    })
+    if (!res.ok) return { ok: false, error: res.error?.message ?? '命令执行失败' }
+    const r = res.value?.result
+    if (r && r.kind === 'error') return { ok: false, error: r.text ?? '命令返回错误' }
+    return { ok: true }
   }
 
   private scheduleListSync(): void {
@@ -762,6 +792,7 @@ export class SessionStore {
         hasMore: rec.hasMore,
         tokens: rec.tokens,
         context: rec.context,
+        permissions: rec.permissions,
       }
     }
 
