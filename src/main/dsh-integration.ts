@@ -99,6 +99,18 @@ function patchBlock(mcpPath: string, pluginPath: string, nodeExe: string): strin
   ].join('\n')
 }
 
+/**
+ * 剥掉开头的 BOM。
+ *
+ * ⚠️ 必须做：Node 的 `readFileSync(p, 'utf8')` **不会**剥 BOM，
+ * 而 dsh 用 js-yaml 解析这个补丁文件 —— **开头多一个 \uFEFF 就直接抛错、dsh 起不来**。
+ * PowerShell 的 `Set-Content -Encoding utf8` 默认写 BOM（我们早期版本的清理脚本就是这么写的），
+ * 一旦沾上，我们的 upsert 会把它原样读回来再写回去 —— **永久留在文件里**。
+ */
+function stripBom(s: string): string {
+  return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s
+}
+
 /** 把 yml 里我们那段标记块替换掉（没有就追加） */
 function upsertBlock(yml: string, block: string): string {
   const b = yml.indexOf(MARK_BEGIN)
@@ -114,7 +126,7 @@ export interface IntegrationResult { ok: boolean; detail: string; files?: string
 /** 灵魂标记块是否在位 */
 export function isSoulInstalled(): boolean {
   try {
-    return readFileSync(agentsPath(), 'utf8').includes(SOUL_BEGIN)
+    return stripBom(readFileSync(agentsPath(), 'utf8')).includes(SOUL_BEGIN)
   } catch {
     return false
   }
@@ -143,7 +155,7 @@ export async function ensureIntegration(): Promise<{ repaired: boolean; detail: 
 
 export function isIntegrated(): boolean {
   try {
-    return readFileSync(profilePatchPath(), 'utf8').includes(MARK_BEGIN)
+    return stripBom(readFileSync(profilePatchPath(), 'utf8')).includes(MARK_BEGIN)
   } catch {
     return false
   }
@@ -157,7 +169,7 @@ export async function installIntegration(): Promise<IntegrationResult> {
 
     const patchFile = profilePatchPath()
     let yml = ''
-    try { yml = readFileSync(patchFile, 'utf8') } catch { /* 首次安装，文件可能不存在 */ }
+    try { yml = stripBom(readFileSync(patchFile, 'utf8')) } catch { /* 首次安装，文件可能不存在 */ }
     mkdirSync(dirname(patchFile), { recursive: true })
     const nodeExe = await resolveNodeExe()
     writeFileSync(patchFile, upsertBlock(yml, patchBlock(mcp, plugin, nodeExe)), 'utf8')
@@ -168,7 +180,7 @@ export async function installIntegration(): Promise<IntegrationResult> {
       const target = agentsPath()
       mkdirSync(dirname(target), { recursive: true })
       let existing = ''
-      try { existing = readFileSync(target, 'utf8') } catch { /* 首次安装没有这个文件 */ }
+      try { existing = stripBom(readFileSync(target, 'utf8')) } catch { /* 首次安装没有这个文件 */ }
       const next = upsertSoulBlock(existing, readFileSync(soulPath, 'utf8'))
       // 内容没变就不写 —— 避免无谓地改动用户的文件
       if (next !== existing) writeFileSync(target, next, 'utf8')
@@ -184,7 +196,7 @@ export function removeIntegration(): IntegrationResult {
   try {
     const patchFile = profilePatchPath()
     try {
-      const yml = readFileSync(patchFile, 'utf8')
+      const yml = stripBom(readFileSync(patchFile, 'utf8'))
       const b = yml.indexOf(MARK_BEGIN)
       const e = yml.indexOf(MARK_END)
       if (b >= 0 && e > b) {
@@ -196,7 +208,7 @@ export function removeIntegration(): IntegrationResult {
     // 上一版是「文件里提到气泡就删掉整个文件」—— 会毁掉用户自己写的内容。
     const target = agentsPath()
     try {
-      const cur = readFileSync(target, 'utf8')
+      const cur = stripBom(readFileSync(target, 'utf8'))
       const next = stripSoulBlock(cur)
       if (next !== cur) {
         if (next.trim()) writeFileSync(target, next, 'utf8')

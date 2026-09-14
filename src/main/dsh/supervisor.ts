@@ -20,10 +20,26 @@ let child: ChildProcess | null = null
 /** dsh web 最近的输出 —— 起不来时全靠它说明原因 */
 const outputTail: string[] = []
 
-/** 把 dsh web 的最后几行拼成可读的诊断文本（没有就返回空串） */
+let sawOutput = false
+const RING = 60
+
+/**
+ * 把 dsh web 的输出拼成可读的诊断文本。
+ *
+ * ⚠️ **头尾都要留**：错误消息在最前面，堆栈在最后面。
+ * 之前只留最后 40 行 —— 结果最关键的那句「哪里错了」被挤掉了，
+ * 用户发回来的日志只有代码片段和堆栈，谁都读不出来。
+ */
 function tailText(): string {
   if (outputTail.length === 0) return ''
-  return '\n\n— dsh web 最后的输出 —\n' + outputTail.slice(-12).join('\n')
+  const head = outputTail.slice(0, 6)
+  const tail = outputTail.slice(-26)
+  const dropped = outputTail.length - head.length - tail.length
+  const parts: string[] = ['', '— dsh web 的输出 —']
+  parts.push(...head)
+  if (dropped > 0) parts.push('… （省略 ' + dropped + ' 行）…')
+  if (tail.length) parts.push(...tail)
+  return '\n' + parts.join('\n')
 }
 let status: SupervisorStatus = { state: 'idle', url: DEFAULT_URL, owned: false }
 const listeners = new Set<(s: SupervisorStatus) => void>()
@@ -108,7 +124,7 @@ export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatu
         const t = line.trim()
         if (!t) continue
         outputTail.push(t)
-        if (outputTail.length > 40) outputTail.shift()
+        if (outputTail.length > RING) outputTail.shift()
       }
     }
     child.stdout?.on('data', pushTail)

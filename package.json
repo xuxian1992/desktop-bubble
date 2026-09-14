@@ -1,7 +1,7 @@
 {
   "name": "desktop-bubble",
-  "version": "1.0.7",
-  "description": "妗岄潰姘旀场鍔╂墜 鈥斺€?甯搁┗ Windows 妗岄潰鐨勫彲缂╂斁姘旀场绐楀彛",
+  "version": "1.0.8",
+  "description": "桌面气泡助手 —— 常驻 Windows 桌面的可缩放气泡窗口",
   "main": "out/main/index.js",
   "author": "desktop-bubble",
   "license": "MIT",

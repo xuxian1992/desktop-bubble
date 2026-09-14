@@ -79,6 +79,21 @@ export function DshMissing({
       if (r.ok) { onReady(); setTimeout(probe, 800) }
     })
   }
+  /**
+   * 逃生通道：如果 dsh 起不来是**我们写进去的接入条目**导致的，
+   * 用户得能自己把它摘掉 —— 否则他会卡在一个「越装越坏」的状态里，毫无办法。
+   */
+  const dropIntegration = (): void => {
+    setStartDetail('正在移除接入…')
+    void window.bubble.unintegrate().then((r) => {
+      setStartDetail(
+        '已移除接入：' +
+          r.detail +
+          '\n再点「启动 dsh」试试。\n（这不影响 dsh 本身，只是不再往里插我们的 MCP 与状态块）',
+      )
+    })
+  }
+
   const saveKey = async (): Promise<void> => {
     const r = await window.bubble.setApiKey(key.trim())
     if (r.ok) { setKeyMsg('已保存'); setKey(''); setTimeout(() => { onReady(); probe() }, 900) }
@@ -116,6 +131,7 @@ export function DshMissing({
         <div className="dm-acts">
           <button className="dm-pri" onClick={startDsh}>启动 dsh</button>
           <button className="dm-sec" onClick={probe}>重新检测</button>
+          <button className="dm-sec" onClick={dropIntegration} title="如果怀疑是气泡写进去的接入条目把 dsh 弄坏的">移除接入再试</button>
         </div>
         {startDetail ? <pre className="dm-log">{startDetail}</pre> : null}
         {/* supervisor 的诊断最有价值 —— 里面有 dsh web 自己说的话 */}
