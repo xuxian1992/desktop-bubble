@@ -1,0 +1,79 @@
+appId: com.desktopbubble.app
+productName: 桌面气泡助手
+copyright: 桌面气泡助手
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - resources/icon.png
+  - resources/tray.png
+  - package.json
+
+# 放在 asar 外面的：运行时要被独立进程读取的资源
+extraResources:
+  - from: mcp
+    to: mcp
+  - from: plugin
+    to: plugin
+  - from: soul
+    to: soul
+  - from: resources/uninstall-cleanup.ps1
+    to: uninstall-cleanup.ps1
+  - from: resources/fg-query.ps1
+    to: fg-query.ps1
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.png
+  artifactName: 桌面气泡助手-${version}-安装包.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 桌面气泡助手
+  include: build/installer.nsh
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+# ---- macOS ----
+# 注意：electron-builder 明确拒绝在非 macOS 上构建 mac 目标
+#   Building for macOS is supported only on macOS
+# 所以这一段只有在 Mac 上（或 CI 的 macOS runner 上）才会生效。
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.productivity
+  icon: resources/icon.png
+  artifactName: 桌面气泡助手-${version}-${arch}.${ext}
+  # 未配置签名证书时不要尝试签名（本地测试用）
+  identity: null
+  extendInfo:
+    # 屏幕捕获必须声明，否则 macOS 会直接拒绝
+    NSCameraUsageDescription: 桌面气泡助手不会使用摄像头
+    NSMicrophoneUsageDescription: 桌面气泡助手不会使用麦克风
+  hardenedRuntime: false
+
+dmg:
+  title: 桌面气泡助手 ${version}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

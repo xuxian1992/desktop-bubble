@@ -1,0 +1,50 @@
+name: 构建 macOS 安装包
+
+on:
+  workflow_dispatch:        # 在 Actions 页手动点一下就跑
+  push:
+    tags: ['v*']
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 编译
+        run: npx electron-vite build
+
+      - name: 打包 .app（先不签名）
+        run: npx electron-builder --mac --dir
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      # Apple Silicon 上「所有可执行代码必须有有效签名」。
+      # 没有 Apple 开发者证书时，ad-hoc 签名（-）是唯一能跑的办法。
+      - name: Ad-hoc 签名（Apple Silicon 必需）
+        run: |
+          APP=$(find release -maxdepth 3 -name '*.app' -type d | head -1)
+          echo "签名: $APP"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose "$APP" || true
+
+      - name: 打成 dmg 与 zip
+        run: |
+          APP=$(find release -maxdepth 3 -name '*.app' -type d | head -1)
+          NAME=$(basename "$APP")
+          mkdir -p out
+          hdiutil create -volname "桌面气泡助手" -srcfolder "$APP" -ov -format UDZO "out/桌面气泡助手-macOS.dmg"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "out/桌面气泡助手-macOS.zip"
+          ls -lh out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 桌面气泡助手-macOS
+          path: out/*

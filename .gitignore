@@ -1,0 +1,19 @@
+node_modules/
+out/
+release/
+release2/
+dist/
+*.log
+
+# 打包产物（100MB+，不进版本库）
+安装包/
+release/*.exe
+*.dmg
+*.zip.blockmap
+
+# 本机测试产物
+proto/
+probe/
+scripts/
+.DS_Store
+Thumbs.db

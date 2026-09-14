@@ -1,0 +1,18 @@
+# 桌面气泡助手的 dsh 叠加层：
+#   1) bubble-context —— 每轮把气泡的运行时状态注入到「气泡正在展示的会话」；
+#   2) mcp-bubble     —— 把气泡自身的能力作为 MCP 工具暴露给内核。
+# 用 `dsh --patch <本文件>` 试跑，或把内容追加进 profile 的 cordis.patch.yml 长期生效。
+- insert:
+    - id: bubble-context
+      name: 'file:///E:/电脑桌面助手项目/plugin/bubble-context.mjs'
+- insert:
+    - id: mcp-bubble
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: bubble
+        transport: stdio
+        command: 'C:\Program Files\nodejs\node.exe'
+        args:
+          - 'E:\电脑桌面助手项目\mcp\bubble-mcp.mjs'
+        cwd: 'E:\电脑桌面助手项目'
+        toolCallTimeoutMs: 30000
