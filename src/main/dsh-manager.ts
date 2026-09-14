@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, rmSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { findPortableDsh, findPortableNode, npmCliJs } from './node-runtime'
 
 /** dsh 运行时管理：检测 / 引导安装。安装包不内置 dsh（方案 D3 决策）。 */
@@ -285,11 +285,42 @@ export function installDsh(onLine: (line: string) => void, onDone: (ok: boolean,
     args = [...inv.args, 'install', '-g', '@deepseek-ai/dsh']
     useShell = inv.shell
 
+    // ⚠️ 便携版 node 不在系统 PATH 上（我们刻意不改用户的机器）。
+    // 但 npm 的**构建脚本**是另起一个 cmd.exe 跑的，继承的是系统 PATH ——
+    // 于是 koffi 这种原生模块的 `cmd /d /s /c node ./cnoke.cjs …` 就找不到 node，
+    // 报「'node' 不是内部或外部命令」，整包装不下。
+    //
+    // 解法：只把便携版 node 的目录塞进**这个子进程**的 PATH。
+    // 系统的 PATH 一个字都不动 —— 影响范围仅限这一次安装。
+    const env: NodeJS.ProcessEnv = { ...process.env }
+    if (!useShell) {
+      const nodeDir = dirname(cmd)
+      env.PATH = nodeDir + ';' + (env.PATH ?? '')
+      onLine('  已把 ' + nodeDir + ' 加入本次安装的 PATH（便于原生模块编译）')
+
+      // 上一次失败的安装会留下残缺目录（npm 自己会报 EPERM 清理不掉，尤其是被占用时）。
+      // 不清掉的话重装会在半成品上叠加，更容易再失败。这里尽力清一次，清不掉也不拦着往下走。
+      const partial = join(nodeDir, 'node_modules', '@deepseek-ai', 'dsh')
+      if (existsSync(partial)) {
+        onLine('  检测到上次安装的残留，先清理…')
+        try {
+          rmSync(partial, { recursive: true, force: true })
+          onLine('  已清理')
+        } catch (err) {
+          onLine('  清理失败（多半是被占用）：' + (err instanceof Error ? err.message : String(err)))
+          onLine('  会继续尝试安装')
+        }
+      }
+    }
+    env.npm_config_audit = 'false'
+    env.npm_config_fund = 'false'
+
     try {
       installing = spawn(cmd, args, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: useShell,
+        env,
       })
     } catch (err) {
       onDone(false, err instanceof Error ? err.message : String(err))
