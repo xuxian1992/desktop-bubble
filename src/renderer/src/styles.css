@@ -452,3 +452,22 @@ code {
 .chipbtn.warn { color: #ffcb8a; }
 .chipbtn.warn b { color: #ffcb8a; }
 
+
+/* dsh 连不上时的诊断文本 —— 里面可能带换行（比如 dsh web 的最后几行输出），要保住 */
+.bus-detail {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(0,0,0,0.28);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10.5px; line-height: 1.5;
+  color: #b9c2d0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  text-align: left;
+  user-select: text;
+  max-height: 190px;
+  overflow: auto;
+}
+

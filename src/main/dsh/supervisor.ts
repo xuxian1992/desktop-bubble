@@ -17,6 +17,14 @@ const READY_TIMEOUT_MS = 40_000
 const POLL_INTERVAL_MS = 700
 
 let child: ChildProcess | null = null
+/** dsh web 最近的输出 —— 起不来时全靠它说明原因 */
+const outputTail: string[] = []
+
+/** 把 dsh web 的最后几行拼成可读的诊断文本（没有就返回空串） */
+function tailText(): string {
+  if (outputTail.length === 0) return ''
+  return '\n\n— dsh web 最后的输出 —\n' + outputTail.slice(-12).join('\n')
+}
 let status: SupervisorStatus = { state: 'idle', url: DEFAULT_URL, owned: false }
 const listeners = new Set<(s: SupervisorStatus) => void>()
 
@@ -81,20 +89,34 @@ export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatu
   //   · 便携版 node 不在系统 PATH 上 → dsh 起的子进程找不到 node → 装上了也连不上
   //   · 路径含空格时不能裸传（cmd.exe 会在空格处断开）
   // resolveDshInvocation 一次把这些都处理掉。
+  outputTail.length = 0
   const inv = await resolveDshInvocation()
   setStatus({ state: 'spawning', detail: '正在启动 dsh web …\n' + inv.cmd + ' ' + inv.args.join(' ') })
   try {
+    // ⚠️ 以前这里是 stdio: 'ignore' —— 等于把唯一能说明「为什么起不来」的东西丢掉了。
+    // 起不来时界面上只有一句干巴巴的「连不上 dsh」，谁都查不下去。
+    // 现在把它的输出留着（环形缓冲最后若干行），失败时连同 detail 一起给出去。
     child = spawn(inv.cmd, [...inv.args, 'web', '--host', '127.0.0.1', '--port', port, '--no-open'], {
       windowsHide: true,
-      stdio: 'ignore',
+      stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
       shell: inv.shell,
       env: inv.env,
     })
+    const pushTail = (d: unknown): void => {
+      for (const line of String(d).split(/\r?\n/)) {
+        const t = line.trim()
+        if (!t) continue
+        outputTail.push(t)
+        if (outputTail.length > 40) outputTail.shift()
+      }
+    }
+    child.stdout?.on('data', pushTail)
+    child.stderr?.on('data', pushTail)
     child.on('exit', (code) => {
       child = null
       if (status.state === 'ready' && status.owned) {
-        setStatus({ state: 'error', detail: 'dsh web 进程退出了（code ' + code + '）' })
+        setStatus({ state: 'error', detail: 'dsh web 进程退出了（code ' + code + '）' + tailText() })
       }
     })
   } catch (err) {
@@ -106,7 +128,7 @@ export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatu
   if (ok) {
     setStatus({ state: 'ready', owned: true, detail: '已拉起 dsh web' })
   } else {
-    setStatus({ state: 'error', detail: 'dsh web 启动超时（40s）' })
+    setStatus({ state: 'error', detail: 'dsh web 启动超时（40s）' + tailText() })
   }
   return status
 }

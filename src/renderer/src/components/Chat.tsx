@@ -324,8 +324,9 @@ export function Chat({
           ) : bus?.state === 'error' ? (
             <div className="empty-hint">
               ⚠ 连不上 dsh
-              <br />
-              {bus.detail ?? ''}
+              {bus.detail ? (
+                <span className="bus-detail">{bus.detail}</span>
+              ) : null}
               <br />
               <span style={{ color: '#6e7686', fontSize: 11 }}>
                 装没装好可以到「设置 → 高级」里查看与重装
