@@ -111,13 +111,38 @@ function stripBom(s: string): string {
   return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s
 }
 
-/** 把 yml 里我们那段标记块替换掉（没有就追加） */
+/** 去掉注释行与空白后，文件真正的「实体内容」 */
+function meaningfulYaml(yml: string): string {
+  return yml
+    .split(/\r?\n/)
+    .filter((l) => !l.trim().startsWith('#'))
+    .join('\n')
+    .trim()
+}
+
+/**
+ * 把 yml 里我们那段标记块替换掉；没有就插进去。
+ *
+ * ⚠️ 这里是曾经把 dsh 弄崩过的地方。原来「没有标记块就一律追加」，于是：
+ *
+ *   dsh 默认的 cordis.patch.yml 内容是 `[]`（一个空数组 —— **本身已经是完整文档**）。
+ *   卸载时我们把标记块切掉、留下 `[]`；重装时又往它后面追加 `- insert:` ——
+ *   一个文件里出现两个顶层节点，YAML 直接拒绝：
+ *
+ *     YAMLException: end of the stream or a document separator is expected (7:1)
+ *
+ *   而 dsh 是在**启动时**读这个文件的，所以表现是「dsh 起不来」，跟接入本身看不出关系。
+ *
+ * 所以：现有内容为空、或就是一个 `[]` 时，**整体替换**，绝不追加。
+ */
 function upsertBlock(yml: string, block: string): string {
   const b = yml.indexOf(MARK_BEGIN)
   const e = yml.indexOf(MARK_END)
   if (b >= 0 && e > b) {
     return yml.slice(0, b) + block + yml.slice(e + MARK_END.length).replace(/^\r?\n/, '')
   }
+  const rest = meaningfulYaml(yml)
+  if (rest === '' || rest === '[]') return block
   return yml.replace(/\s*$/, '') + '\n\n' + block
 }
 
@@ -153,9 +178,23 @@ export async function ensureIntegration(): Promise<{ repaired: boolean; detail: 
   }
 }
 
+/**
+ * 接入是否「既在、又没把文件写坏」。
+ *
+ * ⚠️ 只检查「标记在不在」是不够的 —— 旧版的 upsert 会往 `[]` 后面追加，
+ * 生成一个**两个顶层节点**的坏文件。那种文件里标记是**在**的，
+ * 于是这里会报「已接入」、自愈不会触发，而 dsh 每次启动都崩。
+ *
+ * 所以：只要发现 `[]` 与我们的标记并存，就判定为需要重写。
+ */
 export function isIntegrated(): boolean {
   try {
-    return stripBom(readFileSync(profilePatchPath(), 'utf8')).includes(MARK_BEGIN)
+    const yml = stripBom(readFileSync(profilePatchPath(), 'utf8'))
+    if (!yml.includes(MARK_BEGIN)) return false
+    // 坏形态：空的 flow-sequence 和我们的块并列 —— 两个顶层节点，YAML 会拒绝
+    const before = yml.slice(0, yml.indexOf(MARK_BEGIN))
+    if (meaningfulYaml(before) === '[]') return false
+    return true
   } catch {
     return false
   }
