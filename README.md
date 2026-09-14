@@ -11,7 +11,7 @@
   <sub>也提供 <a href="https://github.com/xuxian1992/desktop-bubble/releases/latest/download/desktop-bubble-1.0.0-win-x64-setup.exe">安装包 exe（98 MB）</a> · <a href="https://github.com/xuxian1992/desktop-bubble/releases">全部版本</a></sub>
 </p>
 
-![侧边栏与 Markdown](docs/screenshot-sidebar.png)
+![界面预览（内容已打码）](docs/screenshot-sidebar.png)
 
 ## 这是什么
 
@@ -102,7 +102,6 @@ npm run dist       # 出 NSIS 安装包 → release/
 所以设计上**绝不主动把画面推给模型**。模型想知道屏幕上有什么，得自己调工具 ——
 而且它先读到的通常是「14:32 出现了一个标题含『错误』的窗口」这种文字，再决定要不要取像素。
 
-![屏幕感知设置](docs/screenshot-perception.png)
 
 ## 已知限制
 
