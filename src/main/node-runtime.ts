@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { spawn } from 'node:child_process'
@@ -63,6 +63,15 @@ export function findPortableDsh(): string | null {
   if (!node) return null
   const guess = join(node, '..', 'dsh.cmd')
   return existsSync(guess) ? guess : null
+}
+
+/**
+ * 便携版 dsh 的 JS 入口（绕开 .cmd —— 不必经过 shell，也没有引号问题）。
+ * package.json 里 bin 是 { dsh: 'lib/bin.js' }。
+ */
+export function portableDshBin(dshCmd: string): string | null {
+  const p = join(dirname(dshCmd), 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  return existsSync(p) ? p : null
 }
 
 /**

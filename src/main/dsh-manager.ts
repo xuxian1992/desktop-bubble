@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { findPortableDsh, findPortableNode, npmCliJs } from './node-runtime'
+import { findPortableDsh, findPortableNode, npmCliJs, portableDshBin } from './node-runtime'
 
 /** dsh 运行时管理：检测 / 引导安装。安装包不内置 dsh（方案 D3 决策）。 */
 
@@ -52,11 +52,27 @@ export async function probeDsh(): Promise<DshProbe> {
   const prefix = await tryRun('npm', ['prefix', '-g'], 15000)
   if (prefix) {
     const guess = join(prefix.trim(), 'dsh.cmd')
-    if (existsSync(guess)) return { found: true, command: guess, source: 'global-npm' }
+    if (existsSync(guess)) {
+      // 同样：文件在 ≠ 能跑（可能是个残缺安装）
+      const v = await tryRun(guess, ['--version'], 20000)
+      if (v !== null) return { found: true, version: v.trim().split(/\s+/).pop(), command: guess, source: 'global-npm' }
+    }
   }
   // 都没有 → 看看我们上次帮装的便携版里有没有
   const ours = findPortableDsh()
-  if (ours) return { found: true, command: ours, source: 'portable' }
+  if (ours) {
+    // ⚠️ 只看 dsh.cmd 在不在是不够的 —— npm 会**先建好命令壳再去跑构建脚本**，
+    // 所以一次失败的安装会留下一个坏掉的 dsh.cmd。
+    // 那样 probeDsh 会误报「已装好」，界面就不再提示安装 —— 用户没有任何入口去修。
+    // 必须真的跑一下才算数。
+    const node = findPortableNode()
+    const bin = portableDshBin(ours)
+    if (node && bin) {
+      const v = await tryRun(node, [bin, '--version'], 20000)
+      if (v !== null) return { found: true, version: v.trim().split(/\s+/).pop(), command: ours, source: 'portable' }
+    }
+    // 验证不通过 → 当作没装，让界面重新提供安装入口
+  }
   return { found: false, source: 'none' }
 }
 
@@ -129,7 +145,18 @@ async function registryPathDirs(): Promise<string[]> {
  *   ③ **注册表里的 PATH** —— 解决「刚装完 Node，进程看不到」
  *   ④ 版本管理器（nvm / fnm / volta / scoop / chocolatey）
  */
+let nodeCache: { at: number; value: string | null } | null = null
+
 async function resolveSystemNode(): Promise<string | null> {
+  // 四路探测加起来可能要十几秒（注册表那两条各自有超时）。
+  // 但 node 装在哪，一次进程生命周期内不会变 —— 缓存 5 分钟，别每次启动都全跑一遍。
+  if (nodeCache && Date.now() - nodeCache.at < 300_000) return nodeCache.value
+  const found = await resolveSystemNodeUncached()
+  nodeCache = { at: Date.now(), value: found }
+  return found
+}
+
+async function resolveSystemNodeUncached(): Promise<string | null> {
   const probe = (p: string): string | null => {
     try { return p && existsSync(p) ? p : null } catch { return null }
   }

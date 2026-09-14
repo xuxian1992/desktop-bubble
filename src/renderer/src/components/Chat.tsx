@@ -322,7 +322,15 @@ export function Chat({
           {dshMissing ? (
             <DshMissing onReady={() => onDshReady?.()} />
           ) : bus?.state === 'error' ? (
-            <div className="empty-hint">⚠ 连不上 dsh<br />{bus.detail ?? ''}</div>
+            <div className="empty-hint">
+              ⚠ 连不上 dsh
+              <br />
+              {bus.detail ?? ''}
+              <br />
+              <span style={{ color: '#6e7686', fontSize: 11 }}>
+                装没装好可以到「设置 → 高级」里查看与重装
+              </span>
+            </div>
           ) : !cur || cur.loading ? (
             <div className="empty-hint">载入中…</div>
           ) : cur.error ? (
