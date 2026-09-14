@@ -88,22 +88,94 @@ export async function resolveNodeExe(): Promise<string> {
  * 应用眼里却「没有 npm」，于是「点了我装」但命令根本找不到。
  * 所以这里多探几个常见安装位置，拿到绝对路径绕开 PATH。
  */
+/**
+ * 从**注册表**读真实的 PATH。
+ *
+ * 为什么不能只信 `process.env.PATH`：它是进程启动时那一份快照。
+ * 用户刚装完 Node、或者气泡是从很旧的快捷方式/explorer 环境拉起来的，
+ * 进程里的 PATH 就可能是陈旧的 —— 明明装了 Node，应用却「看不见」。
+ * 注册表里那份才是当前值。
+ */
+async function registryPathDirs(): Promise<string[]> {
+  if (process.platform !== 'win32') return []
+  const keys = [
+    'HKCU\\Environment',
+    'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment',
+  ]
+  const dirs: string[] = []
+  for (const k of keys) {
+    // ⚠️ 机器级那个 key 含空格（Session Manager）—— tryRun 走 shell，不加引号会在空格处断开
+    const keyArg = /\s/.test(k) ? '"' + k + '"' : k
+    const out = await tryRun('reg', ['query', keyArg, '/v', 'Path'], 8000)
+    if (!out) continue
+    // 形如：    Path    REG_EXPAND_SZ    C:\a;C:\b
+    const m = out.match(/Path\s+REG_[A-Z_]*(?:SZ)?\s+(.+)/i)
+    if (!m) continue
+    for (const seg of m[1].split(';')) {
+      const s = seg.trim().replace(/^"|"$/g, '')
+      if (!s) continue
+      // 展开 %VAR%
+      const expanded = s.replace(/%([^%]+)%/g, (_all, name: string) => process.env[name] ?? process.env[name.toUpperCase()] ?? '')
+      if (expanded) dirs.push(expanded)
+    }
+  }
+  return dirs
+}
+
+/**
+ * 找系统里的 node.exe。四路探测，从便宜到昂贵：
+ *   ① PATH（最快）
+ *   ② 常见安装位置（官方安装器、Program Files）
+ *   ③ **注册表里的 PATH** —— 解决「刚装完 Node，进程看不到」
+ *   ④ 版本管理器（nvm / fnm / volta / scoop / chocolatey）
+ */
 async function resolveSystemNode(): Promise<string | null> {
+  const probe = (p: string): string | null => {
+    try { return p && existsSync(p) ? p : null } catch { return null }
+  }
+
+  // ① PATH
   const out = await tryRun(process.platform === 'win32' ? 'where' : 'which', ['node'], 12000)
   if (out) {
     const first = out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0]
-    if (first && existsSync(first)) return first
+    const hit = first ? probe(first) : null
+    if (hit) return hit
   }
-  const candidates = process.platform === 'win32'
-    ? [
-        join(process.env.ProgramFiles ?? 'C:\\Program Files', 'nodejs', 'node.exe'),
-        join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'nodejs', 'node.exe'),
-        join(process.env.LOCALAPPDATA ?? '', 'Programs', 'nodejs', 'node.exe'),
-      ]
-    : ['/usr/local/bin/node', '/opt/homebrew/bin/node', '/usr/bin/node']
-  for (const p of candidates) {
-    try { if (p && existsSync(p)) return p } catch { /* 跳过 */ }
+
+  if (process.platform !== 'win32') {
+    for (const p of ['/usr/local/bin/node', '/opt/homebrew/bin/node', '/usr/bin/node']) {
+      const hit = probe(p); if (hit) return hit
+    }
+    return null
   }
+
+  // ② 常见安装位置
+  const pf = process.env.ProgramFiles ?? 'C:\\Program Files'
+  const pf86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)'
+  const local = process.env.LOCALAPPDATA ?? ''
+  const roaming = process.env.APPDATA ?? ''
+  const home = process.env.USERPROFILE ?? ''
+  for (const p of [
+    join(pf, 'nodejs', 'node.exe'),
+    join(pf86, 'nodejs', 'node.exe'),
+    join(local, 'Programs', 'nodejs', 'node.exe'),
+    join('C:\\Program Files', 'nodejs', 'node.exe'),
+    // ④ 版本管理器
+    join(roaming, 'nvm', 'current', 'node.exe'),
+    join(local, 'Volta', 'bin', 'node.exe'),
+    join(home, 'scoop', 'apps', 'nodejs', 'current', 'node.exe'),
+    join(home, 'scoop', 'shims', 'node.exe'),
+    'C:\\ProgramData\\chocolatey\\bin\\node.exe',
+  ]) {
+    const hit = probe(p); if (hit) return hit
+  }
+
+  // ③ 注册表 PATH 里的目录
+  for (const d of await registryPathDirs()) {
+    const hit = probe(join(d, 'node.exe'))
+    if (hit) return hit
+  }
+
   return null
 }
 
