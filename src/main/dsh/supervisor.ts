@@ -95,12 +95,36 @@ async function waitReady(base: string, deadline: number): Promise<boolean> {
 export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatus> {
   setStatus({ url: base, state: 'probing', detail: undefined })
 
+  const port = new URL(base).port || '3080'
+
+  // ① 已经在跑 → 直接复用
   if (await probe(base)) {
     setStatus({ state: 'ready', owned: false, detail: '复用已在运行的 dsh web' })
     return status
   }
 
-  const port = new URL(base).port || '3080'
+  // ② 端口被占、但探活不通 —— 多半是**上一次的启动还在路上**。
+  //    用户点了几次「启动 dsh」时最容易撞上这个：每次都 spawn 一个新的，
+  //    第一个还在启动，第二个就 EADDRINUSE 死掉，看起来像「怎么点都起不来」。
+  const owner = await portOwner(port)
+  if (owner) {
+    setStatus({
+      state: 'probing',
+      detail: '端口 ' + port + ' 已被占用（PID ' + owner.pid + (owner.name ? ' ' + owner.name : '') + '），等它就绪…',
+    })
+    if (await waitReady(base, Date.now() + 20000)) {
+      setStatus({ state: 'ready', owned: false, detail: '复用已在运行的 dsh web' })
+      return status
+    }
+    // 等了 20 秒还是不通。如果占端口的是 node/dsh，说明那是我们自己的僵尸进程，清掉；
+    // 是别的东西就绝不动它 —— 让下面的 spawn 去报 EADDRINUSE，把真相告诉用户。
+    if (/node|dsh/i.test(owner.name)) {
+      setStatus({ state: 'spawning', detail: '占用端口的 ' + owner.name + '（PID ' + owner.pid + '）没响应，结束它后重来' })
+      try { process.kill(owner.pid) } catch { /* 权限不够就算了 */ }
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+  }
+
   // ⚠️ 关键是**环境和调用方式**，不只是命令本身：
   //   · 便携版 node 不在系统 PATH 上 → dsh 起的子进程找不到 node → 装上了也连不上
   //   · 路径含空格时不能裸传（cmd.exe 会在空格处断开）
@@ -147,6 +171,48 @@ export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatu
     setStatus({ state: 'error', detail: 'dsh web 启动超时（40s）' + tailText() })
   }
   return status
+}
+
+interface PortOwner { pid: number; name: string }
+
+/**
+ * 谁占着这个端口？
+ *
+ * 为什么需要：用户点了几次「启动 dsh」，每次都探活失败 → 每次都 spawn 一个新的，
+ * 而 dsh 启动不快 —— 第一个还在启动，第二个就撞 `EADDRINUSE` 死掉，
+ * 表现得就像「怎么点都起不来」。
+ */
+async function portOwner(port: string): Promise<PortOwner | null> {
+  const ps = process.platform === 'win32' ? 'powershell' : 'sh'
+  const cmd =
+    process.platform === 'win32'
+      ? '$p = Get-NetTCPConnection -LocalPort ' + port + ' -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess; if ($p) { $n = (Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName; "$p|$n" }'
+      : 'lsof -ti tcp:' + port + ' 2>/dev/null | head -1'
+  const out = await tryRun(ps, ['-NoProfile', '-Command', cmd], 12000)
+  if (!out) return null
+  const line = out.trim().split(/\r?\n/).pop() ?? ''
+  if (process.platform === 'win32') {
+    const [pidStr, name] = line.split('|')
+    const pid = Number(pidStr)
+    return Number.isFinite(pid) && pid > 0 ? { pid, name: name ?? '' } : null
+  }
+  const pid = Number(line)
+  return Number.isFinite(pid) && pid > 0 ? { pid, name: '' } : null
+}
+
+function tryRun(cmd: string, args: string[], timeoutMs: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    let out = ''
+    let done = false
+    const fin = (v: string | null): void => { if (!done) { done = true; resolve(v) } }
+    try {
+      const c = spawn(cmd, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+      const t = setTimeout(() => { try { c.kill() } catch { /* ignore */ }; fin(null) }, timeoutMs)
+      c.stdout?.on('data', (d) => { out += String(d) })
+      c.on('error', () => { clearTimeout(t); fin(null) })
+      c.on('exit', (code) => { clearTimeout(t); fin(code === 0 ? out : null) })
+    } catch { fin(null) }
+  })
 }
 
 /** 只停我们自己拉起来的实例 */
