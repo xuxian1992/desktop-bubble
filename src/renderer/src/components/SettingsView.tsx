@@ -93,6 +93,8 @@ export function SettingsView({ config, onPatch, onBack, dshUrl }: {
   const [version, setVersion] = useState('')
   const [probe, setProbe] = useState<DshProbeView | null>(null)
   const [rt, setRt] = useState<RuntimeStatusView | null>(null)
+  const [diagUrl, setDiagUrl] = useState('')
+  const [diagMsg, setDiagMsg] = useState('')
   const [integState, setIntegState] = useState<IntegrationState | null>(null)
   const [integMsg, setIntegMsg] = useState('')
   const [installLog, setInstallLog] = useState<string[]>([])
@@ -120,6 +122,16 @@ export function SettingsView({ config, onPatch, onBack, dshUrl }: {
     })
     return () => { offLine(); offDone(); offNode(); offNodeDone() }
   }, [])
+
+  const doSendDiag = (): void => {
+    setDiagMsg('正在收集并发送…')
+    void window.bubble.diagSend(diagUrl.trim()).then((r) => setDiagMsg((r.ok ? '已发送：' : '失败：') + r.detail))
+  }
+
+  const doSaveDiag = (): void => {
+    setDiagMsg('正在收集…')
+    void window.bubble.diagSave().then((r) => setDiagMsg(r.ok ? '已存到 ' + r.path : '保存失败'))
+  }
 
   /** 删掉我们帮装的便携版 Node.js（用户自己装的那份不动） */
   const doRemoveNode = (): void => {
@@ -469,6 +481,27 @@ export function SettingsView({ config, onPatch, onBack, dshUrl }: {
                   )}
                 </Row>
                 {installLog.length > 0 ? <pre className="installlog">{installLog.join('\n')}</pre> : null}
+              </div>
+
+              <div className="sect">
+                <div className="ttl">远程诊断</div>
+                <div className="desc" style={{ paddingBottom: 6 }}>
+                  出问题时点一下这个 —— 它会把 Node/npm/dsh 的状态、配置文件内容、端口占用、
+                  以及 dsh 自己的输出**一次性**打包发出去。比截图贴日志快得多。
+                </div>
+                <Row label="接收地址" hint="填对方给你的地址；留空则只存文件">
+                  <input
+                    className="srename"
+                    style={{ maxWidth: 260 }}
+                    value={diagUrl}
+                    placeholder="http://192.168.3.7:9099/diag"
+                    onChange={(e) => setDiagUrl(e.target.value)}
+                  />
+                </Row>
+                <Row label={diagMsg || '还没有发过'} hint="发送成功后对方会立刻看到">
+                  <span className="kbd2" onClick={doSendDiag}>发送诊断</span>
+                  <span className="kbd2" onClick={doSaveDiag} style={{ marginLeft: 6 }}>存成文件</span>
+                </Row>
               </div>
 
               <div className="sect">

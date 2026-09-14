@@ -12,7 +12,17 @@ export interface DshProbe {
   source: 'path' | 'global-npm' | 'portable' | 'none'
 }
 
-function tryRun(cmd: string, args: string[], timeoutMs = 15000): Promise<string | null> {
+/**
+ * 跑一个命令拿输出。
+ *
+ * ⚠️ `shell` 必须可传 —— 这是一个今天栽了五次的坑：
+ *   **路径含空格 + shell:true = cmd.exe 在空格处断开**。
+ *   `C:\Program Files\nodejs\node.exe` 正是含空格的，于是 `node -v` 永远拿不到版本，
+ *   表现成「探测不到 node / npm」—— 而机器上明明装得好好的。
+ *
+ * 规则：**给的是绝对路径就不要 shell；给的是裸命令名（靠 PATH 找）才要 shell。**
+ */
+function tryRun(cmd: string, args: string[], timeoutMs = 15000, shell = true): Promise<string | null> {
   return new Promise((resolve) => {
     let out = ''
     let done = false
@@ -22,7 +32,7 @@ function tryRun(cmd: string, args: string[], timeoutMs = 15000): Promise<string 
       resolve(v)
     }
     try {
-      const child = spawn(cmd, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: true })
+      const child = spawn(cmd, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell })
       const timer = setTimeout(() => { try { child.kill() } catch { /* ignore */ }; finish(null) }, timeoutMs)
       child.stdout?.on('data', (d) => { out += String(d) })
       child.stderr?.on('data', (d) => { out += String(d) })
@@ -54,7 +64,7 @@ export async function probeDsh(): Promise<DshProbe> {
     const guess = join(prefix.trim(), 'dsh.cmd')
     if (existsSync(guess)) {
       // 同样：文件在 ≠ 能跑（可能是个残缺安装）
-      const v = await tryRun(guess, ['--version'], 20000)
+      const v = await tryRun(guess, ['--version'], 20000, /\s/.test(guess))
       if (v !== null) return { found: true, version: v.trim().split(/\s+/).pop(), command: guess, source: 'global-npm' }
     }
   }
@@ -68,7 +78,7 @@ export async function probeDsh(): Promise<DshProbe> {
     const node = findPortableNode()
     const bin = portableDshBin(ours)
     if (node && bin) {
-      const v = await tryRun(node, [bin, '--version'], 20000)
+      const v = await tryRun(node, [bin, '--version'], 20000, false)
       if (v !== null) return { found: true, version: v.trim().split(/\s+/).pop(), command: ours, source: 'portable' }
     }
     // 验证不通过 → 当作没装，让界面重新提供安装入口
@@ -236,7 +246,7 @@ export interface NpmProbe { found: boolean; version?: string; source?: 'path' | 
 export async function probeNpm(): Promise<NpmProbe> {
   // 先用绝对路径形式探（不依赖 PATH）
   const inv = await resolveNpmInvocation()
-  const v = await tryRun(inv.cmd, [...inv.args, '--version'], 20000)
+  const v = await tryRun(inv.cmd, [...inv.args, '--version'], 20000, inv.shell)
   if (v !== null) {
     const ver = v.trim().split(/\s+/).pop()
     if (inv.label.includes('便携')) return { found: true, version: ver, source: 'portable' }
@@ -308,8 +318,8 @@ export async function probeRuntime(): Promise<RuntimeStatus> {
   const portable = findPortableNode()
   const sysNodePath = sysNode ? sysNode.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0] : undefined
   const nodeVer = sysNodePath
-    ? (await tryRun(sysNodePath, ['-v'], 12000))?.trim()
-    : (portable ? (await tryRun(portable, ['-v'], 12000))?.trim() : undefined)
+    ? (await tryRun(sysNodePath, ['-v'], 12000, false))?.trim()
+    : (portable ? (await tryRun(portable, ['-v'], 12000, false))?.trim() : undefined)
   const npmProbe = await probeNpm()
   return {
     node: {

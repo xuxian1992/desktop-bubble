@@ -46,6 +46,10 @@ const api: BubbleApi = {
     invoke('dsh:start') as Promise<{ ok: boolean; state: string; detail: string }>,
   /** 引导截图（数据 URL，渲染层读不到磁盘） */
   apiKeyGuideImage: () => invoke('guide:apiKeyImage') as Promise<string>,
+  /** 一键诊断：收集 / 发送 / 存文件 */
+  diagCollect: () => invoke('diag:collect') as Promise<Record<string, unknown>>,
+  diagSend: (url: string) => invoke('diag:send', url) as Promise<{ ok: boolean; detail: string }>,
+  diagSave: () => invoke('diag:save') as Promise<{ ok: boolean; path: string }>,
   refresh: () => invoke('dsh:refresh') as Promise<void>,
   answerInbox: (itemId: string, answer: InboxAnswer) =>
     invoke('dsh:answerInbox', itemId, answer) as Promise<void>,

@@ -1,5 +1,5 @@
 import { app, clipboard, ipcMain, shell } from 'electron'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type {
   Attachment, DiaryEntryView, FormFactor, HotkeyAction, InboxAnswer, IntegrationState,
@@ -10,6 +10,7 @@ import { installDsh, probeDsh, probeNpm, probeRuntime } from './dsh-manager'
 import { installPortableNode, nodeRuntimeDir, removePortableNode } from './node-runtime'
 import { installIntegration, isIntegrated, removeIntegration, resourceRoot } from './dsh-integration'
 import { ensureRunning } from './dsh/supervisor'
+import { collectDiagnostics, sendDiagnostics } from './diagnostics'
 import { screenshotDirOf } from './capture'
 import type { SessionStore } from './store/session-store'
 import { captureDisplay, finishRegion, saveTempCopy, selectRegion } from './capture'
@@ -145,6 +146,23 @@ export function registerIpc(store: SessionStore): void {
   })
 
   // 引导截图（数据 URL —— 渲染层在沙箱里读不到磁盘）
+  /* ---- 一键诊断 ---- */
+
+  ipcMain.handle('diag:collect', () => collectDiagnostics())
+
+  ipcMain.handle('diag:send', (_e, url: string) => sendDiagnostics(url))
+
+  // 存成文件（发不了网的时候用这个，手动传给我也一样）
+  ipcMain.handle('diag:save', async () => {
+    const d = await collectDiagnostics()
+    const dir = join(app.getPath('userData'), 'diagnostics')
+    mkdirSync(dir, { recursive: true })
+    const f = join(dir, 'diag-' + Date.now() + '.json')
+    writeFileSync(f, JSON.stringify(d, null, 2), 'utf8')
+    void shell.showItemInFolder(f)
+    return { ok: true, path: f }
+  })
+
   ipcMain.handle('guide:apiKeyImage', () => {
     try {
       const p = join(resourceRoot(), 'resources', 'guide-apikey.png')

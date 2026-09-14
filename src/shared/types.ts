@@ -326,7 +326,13 @@ export interface BubbleApi {
   /** 让 dsh web 起来（引导里的「启动 dsh」按钮用） */
   startDsh(): Promise<{ ok: boolean; state: string; detail: string }>
   /** API Key 引导截图（数据 URL） */
-  apiKeyGuideImage(): Promise<string>,
+  apiKeyGuideImage(): Promise<string>
+  /** 收集一份完整诊断（Node/npm/dsh、配置文件、端口占用、dsh 自己的输出） */
+  diagCollect(): Promise<Record<string, unknown>>
+  /** 把诊断推给指定地址 */
+  diagSend(url: string): Promise<{ ok: boolean; detail: string }>
+  /** 存成文件并打开所在目录 */
+  diagSave(): Promise<{ ok: boolean; path: string }>,
   refresh(): Promise<void>
   answerInbox(itemId: string, answer: InboxAnswer): Promise<void>
 
