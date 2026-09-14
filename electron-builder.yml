@@ -5,6 +5,9 @@ directories:
   output: release
   buildResources: build
 
+# 打包后精简运行时（删语言包与许可证文本；绝不改动 electron.exe 的哈希）
+afterPack: build/after-pack.cjs
+
 files:
   - out/**/*
   - resources/icon.png
