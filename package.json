@@ -1,6 +1,6 @@
 {
   "name": "desktop-bubble",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "桌面气泡助手 —— 常驻 Windows 桌面的可缩放气泡窗口",
   "main": "out/main/index.js",
   "author": "desktop-bubble",
