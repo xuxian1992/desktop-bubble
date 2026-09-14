@@ -1,5 +1,6 @@
 import { app, clipboard, ipcMain, shell } from 'electron'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type {
   Attachment, DiaryEntryView, FormFactor, HotkeyAction, InboxAnswer, IntegrationState,
   MonitorMode, PerceptionView, Rect, ResizeEdge,
@@ -7,7 +8,8 @@ import type {
 import { clearDiary, getDiary, getMode, getStats, searchDiary, setMode as setMonitorMode } from './perception'
 import { installDsh, probeDsh, probeNpm, probeRuntime } from './dsh-manager'
 import { installPortableNode, nodeRuntimeDir, removePortableNode } from './node-runtime'
-import { installIntegration, isIntegrated, removeIntegration } from './dsh-integration'
+import { installIntegration, isIntegrated, removeIntegration, resourceRoot } from './dsh-integration'
+import { ensureRunning } from './dsh/supervisor'
 import { screenshotDirOf } from './capture'
 import type { SessionStore } from './store/session-store'
 import { captureDisplay, finishRegion, saveTempCopy, selectRegion } from './capture'
@@ -133,6 +135,24 @@ export function registerIpc(store: SessionStore): void {
   })
   ipcMain.handle('setup:removeNode', () => removePortableNode())
   ipcMain.handle('setup:nodeRuntimeDir', () => nodeRuntimeDir())
+
+  /* ---- 引导：让用户能自己把 dsh 弄起来 / 填 Key ---- */
+
+  // 「启动 dsh」按钮 —— 不用重启气泡
+  ipcMain.handle('dsh:start', async () => {
+    const s = await ensureRunning()
+    return { ok: s.state === 'ready', state: s.state, detail: s.detail ?? '' }
+  })
+
+  // 引导截图（数据 URL —— 渲染层在沙箱里读不到磁盘）
+  ipcMain.handle('guide:apiKeyImage', () => {
+    try {
+      const p = join(resourceRoot(), 'resources', 'guide-apikey.png')
+      return 'data:image/png;base64,' + readFileSync(p).toString('base64')
+    } catch {
+      return ''
+    }
+  })
   ipcMain.handle('setup:reconnect', async () => (retryHook ? await retryHook() : false))
   ipcMain.handle('setup:apiKeyState', () => store.credentialConfigured('DEEPSEEK_API_KEY'))
   ipcMain.handle('setup:setApiKey', (_e, value: string) => {

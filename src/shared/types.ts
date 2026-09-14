@@ -323,6 +323,10 @@ export interface BubbleApi {
   cancel(): Promise<void>
   /** 执行一条斜杠命令（权限档位切换走这里 —— 实测 prompt 发文本不会执行命令） */
   runCommand(line: string): Promise<{ ok: boolean; error?: string }>
+  /** 让 dsh web 起来（引导里的「启动 dsh」按钮用） */
+  startDsh(): Promise<{ ok: boolean; state: string; detail: string }>
+  /** API Key 引导截图（数据 URL） */
+  apiKeyGuideImage(): Promise<string>,
   refresh(): Promise<void>
   answerInbox(itemId: string, answer: InboxAnswer): Promise<void>
 

@@ -64,7 +64,7 @@ function agentsPath(): string {
 }
 
 /** 自带资源目录：开发时在项目根，打包后在 process.resourcesPath（extraResources 落在这里） */
-function resourceRoot(): string {
+export function resourceRoot(): string {
   return app.isPackaged ? process.resourcesPath : join(__dirname, '../..')
 }
 

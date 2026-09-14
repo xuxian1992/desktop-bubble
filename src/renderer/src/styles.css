@@ -471,3 +471,29 @@ code {
   overflow: auto;
 }
 
+
+/* ---------- 引导里的输入框 / 折叠说明 / 截图 ---------- */
+.dshmiss-msg .dm-keyrow { display: flex; gap: 6px; margin: 2px 0 8px; }
+.dshmiss-msg .dm-input {
+  flex: 1; min-width: 0;
+  padding: 6px 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: rgba(0,0,0,0.28);
+  color: var(--text); font-size: 12px;
+  font-family: ui-monospace, Consolas, monospace;
+  user-select: text;
+}
+.dshmiss-msg .dm-input:focus { outline: none; border-color: var(--accent); }
+.dshmiss-msg .dm-pri[disabled] { opacity: .45; cursor: default; }
+.dshmiss-msg .dm-more { margin-top: 4px; }
+.dshmiss-msg .dm-more > summary {
+  cursor: pointer; font-size: 11.5px; color: #8ea2ff;
+  list-style: none; user-select: none;
+}
+.dshmiss-msg .dm-more > summary::-webkit-details-marker { display: none; }
+.dshmiss-msg .dm-more > summary::before { content: '▸ '; }
+.dshmiss-msg .dm-more[open] > summary::before { content: '▾ '; }
+.dshmiss-msg .dm-guide {
+  display: block; width: 100%; margin-top: 8px;
+  border-radius: 9px; border: 1px solid var(--line);
+}
+

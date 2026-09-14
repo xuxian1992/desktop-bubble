@@ -41,6 +41,11 @@ const api: BubbleApi = {
   cancel: () => invoke('dsh:cancel') as Promise<void>,
   runCommand: (line: string) =>
     invoke('dsh:command', line) as Promise<{ ok: boolean; error?: string }>,
+  /** 「启动 dsh」按钮 —— 不用重启气泡 */
+  startDsh: () =>
+    invoke('dsh:start') as Promise<{ ok: boolean; state: string; detail: string }>,
+  /** 引导截图（数据 URL，渲染层读不到磁盘） */
+  apiKeyGuideImage: () => invoke('guide:apiKeyImage') as Promise<string>,
   refresh: () => invoke('dsh:refresh') as Promise<void>,
   answerInbox: (itemId: string, answer: InboxAnswer) =>
     invoke('dsh:answerInbox', itemId, answer) as Promise<void>,

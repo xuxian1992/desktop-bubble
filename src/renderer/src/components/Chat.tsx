@@ -45,6 +45,7 @@ export function Chat({
   onOpenLink: (url: string) => void
   /** 没检测到 dsh —— 在聊天流里说这件事，而不是另加一条横幅 */
   dshMissing?: boolean
+  /** supervisor 给的诊断（含 dsh web 最后几行输出） */
   onDshReady?: () => void
   onCopy: (text: string) => void
 }) {
@@ -319,20 +320,13 @@ export function Chat({
         {snap ? <InboxBar snap={snap} /> : null}
 
         <div className="msgs" ref={scrollRef}>
-          {dshMissing ? (
-            <DshMissing onReady={() => onDshReady?.()} />
-          ) : bus?.state === 'error' ? (
-            <div className="empty-hint">
-              ⚠ 连不上 dsh
-              {bus.detail ? (
-                <span className="bus-detail">{bus.detail}</span>
-              ) : null}
-              <br />
-              <span style={{ color: '#6e7686', fontSize: 11 }}>
-                装没装好可以到「设置 → 高级」里查看与重装
-              </span>
-            </div>
-          ) : !cur || cur.loading ? (
+          {/* 引导总在最前；一切正常时它自己返回 null */}
+          <DshMissing
+            connected={bus?.state === 'ready'}
+            detail={bus?.detail ?? ''}
+            onReady={() => onDshReady?.()}
+          />
+          {bus?.state === 'error' ? null : !cur || cur.loading ? (
             <div className="empty-hint">载入中…</div>
           ) : cur.error ? (
             <div className="empty-hint">读取会话失败<br />{cur.error}</div>
