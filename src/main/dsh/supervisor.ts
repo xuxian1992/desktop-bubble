@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { HostDescription } from '../../shared/dsh'
-import { probeDsh } from '../dsh-manager'
+import { resolveDshInvocation } from '../dsh-manager'
 
 export type SupervisorState = 'idle' | 'probing' | 'spawning' | 'ready' | 'error'
 
@@ -76,25 +76,20 @@ export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatu
     return status
   }
 
-  setStatus({ state: 'spawning', detail: '正在启动 dsh web …' })
   const port = new URL(base).port || '3080'
-  // ⚠️ 不能写死 `cmd /c dsh` —— 那样只能靠 PATH 找 dsh。
-  // 如果 dsh 是气泡用**便携版 Node** 装的，它落在气泡自己的数据目录里、根本不在 PATH 上。
-  // 所以先解析出真实命令（可能是 'dsh'，也可能是一个绝对路径的 dsh.cmd），再交给 shell 执行。
-  const found = await probeDsh()
-  const rawCmd = found.found && found.command ? found.command : 'dsh'
-  // ⚠️ 路径含空格时必须自己加引号。实测：
-  //      spawn(cmd, args, {shell:true}) 且 cmd 未加引号 → cmd.exe 在空格处断开，起不来；
-  //      而 %APPDATA% 正可能含空格（用户名带空格时，如 C:\Users\Zhang San\...），
-  //      便携版 Node 就装在那底下。
-  //    加引号后实测通过（不引号还会 EINVAL 因为 .cmd 不能脱离 shell 跑）。
-  const dshCmd = /\s/.test(rawCmd) ? '"' + rawCmd + '"' : rawCmd
+  // ⚠️ 关键是**环境和调用方式**，不只是命令本身：
+  //   · 便携版 node 不在系统 PATH 上 → dsh 起的子进程找不到 node → 装上了也连不上
+  //   · 路径含空格时不能裸传（cmd.exe 会在空格处断开）
+  // resolveDshInvocation 一次把这些都处理掉。
+  const inv = await resolveDshInvocation()
+  setStatus({ state: 'spawning', detail: '正在启动 dsh web …\n' + inv.cmd + ' ' + inv.args.join(' ') })
   try {
-    child = spawn(dshCmd, ['web', '--host', '127.0.0.1', '--port', port, '--no-open'], {
+    child = spawn(inv.cmd, [...inv.args, 'web', '--host', '127.0.0.1', '--port', port, '--no-open'], {
       windowsHide: true,
       stdio: 'ignore',
       detached: false,
-      shell: true,
+      shell: inv.shell,
+      env: inv.env,
     })
     child.on('exit', (code) => {
       child = null

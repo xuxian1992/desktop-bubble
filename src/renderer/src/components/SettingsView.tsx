@@ -456,9 +456,12 @@ export function SettingsView({ config, onPatch, onBack, dshUrl }: {
                 </Row>
                 <Row
                   label={rt ? (rt.dsh.found ? 'dsh ' + (rt.dsh.version ?? '') : '没有 dsh') : '检测中…'}
-                  hint={rt?.dsh.found
-                    ? ('来源：' + (rt.dsh.source === 'portable' ? '气泡帮装的' : rt.dsh.source === 'global-npm' ? '你 npm 全局装的' : '系统 PATH'))
-                    : '气泡只是一个壳，真正干活的大脑是 dsh'}>
+                  hint={
+                    rt?.dsh.found
+                      ? (rt.dsh.source === 'portable' ? '气泡帮装的 · ' : rt.dsh.source === 'global-npm' ? '你 npm 全局装的 · ' : '系统 PATH · ') +
+                        (rt.dsh.command ?? '')
+                      : '气泡只是一个壳，真正干活的大脑是 dsh'
+                  }>
                   {rt?.dsh.found ? (
                     <span className="kbd2" onClick={() => void window.bubble.probeRuntime().then(setRt)}>重新检测</span>
                   ) : (

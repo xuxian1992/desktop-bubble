@@ -245,6 +245,50 @@ export async function probeNpm(): Promise<NpmProbe> {
   return { found: false }
 }
 
+export interface DshInvocation {
+  cmd: string
+  args: string[]
+  shell: boolean
+  env: NodeJS.ProcessEnv
+}
+
+/**
+ * 决定「怎么启动 dsh」，连同它需要的环境。
+ *
+ * 为什么不能只 spawn 一个 `dsh.cmd` 就完事：
+ *   · 便携版 node 不在系统 PATH 上（我们刻意不改用户的机器）——
+ *     但 dsh 起来之后要开子进程（工具调用、git 等），那些进程按系统 PATH 找 node，找不到。
+ *   · `.cmd` 外壳还要经过 shell，多一层转义问题。
+ *
+ * 所以优先用 `node.exe + <dsh>/lib/bin.js` 直接起，并把 node 的目录放进**子进程**的 PATH。
+ * 这才是 dsh 能真正跑起来的前提 —— 装上了但连不上，多半就是卡在这。
+ */
+export async function resolveDshInvocation(): Promise<DshInvocation> {
+  const env: NodeJS.ProcessEnv = { ...process.env }
+  const found = await probeDsh()
+
+  if (found.found && found.command) {
+    // 便携版：node.exe + bin.js 直起
+    if (found.source === 'portable') {
+      const node = findPortableNode()
+      const bin = portableDshBin(found.command)
+      if (node && bin) {
+        env.PATH = dirname(node) + ';' + (env.PATH ?? '')
+        return { cmd: node, args: [bin], shell: false, env }
+      }
+    }
+    // 系统 PATH 上的 dsh / 用户 npm 全局装的：走原来的方式，但同样补上 PATH
+    const c = found.command
+    const node = await resolveSystemNode()
+    if (node) env.PATH = dirname(node) + ';' + (env.PATH ?? '')
+    return { cmd: /\s/.test(c) ? '"' + c + '"' : c, args: [], shell: true, env }
+  }
+
+  const node = await resolveSystemNode()
+  if (node) env.PATH = dirname(node) + ';' + (env.PATH ?? '')
+  return { cmd: 'dsh', args: [], shell: true, env }
+}
+
 export interface RuntimeStatus {
   node: { found: boolean; version?: string; portable: boolean }
   npm: { found: boolean; version?: string; portable: boolean }
