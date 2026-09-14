@@ -11,7 +11,7 @@
   <sub>也提供 <a href="https://github.com/xuxian1992/desktop-bubble/releases/latest/download/desktop-bubble-1.0.0-win-x64-setup.exe">安装包 exe（98 MB）</a> · <a href="https://github.com/xuxian1992/desktop-bubble/releases">全部版本</a></sub>
 </p>
 
-![界面预览（内容已打码）](docs/screenshot-sidebar.png)
+![界面预览](docs/screenshot-sidebar.png)
 
 ## 这是什么
 
