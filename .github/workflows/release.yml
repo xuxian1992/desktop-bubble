@@ -1,0 +1,75 @@
+name: 发布
+
+# GitHub 上发 exe 的标准做法：
+#   打 tag → CI 自动构建 → 自动挂到 Release → 用户去 Releases 页下载
+#
+# 二进制不进 git 仓库（有 100MB 单文件限制，而且会把仓库撑爆）。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:        # 也可以手动触发
+
+permissions:
+  contents: write           # 建 Release、传附件需要
+
+jobs:
+  # ---------- Windows：安装包 + 免安装 ZIP ----------
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx electron-vite build
+
+      # electron-builder 会自动把产物传到当前 tag 对应的 Release
+      # （需要 GH_TOKEN，用内置的 GITHUB_TOKEN 即可）
+      - name: 打包并发布
+        run: npx electron-builder --win nsis --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------- macOS：dmg（只能在 macOS 上构建）----------
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx electron-vite build
+
+      - name: 打包 .app（先不签名）
+        run: npx electron-builder --mac --dir
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      # Apple Silicon 上「所有可执行代码必须有有效签名」，
+      # 没有开发者证书时 ad-hoc 签名（-）是唯一能跑的办法。
+      - name: Ad-hoc 签名
+        run: |
+          APP=$(find release -maxdepth 3 -name '*.app' -type d | head -1)
+          codesign --force --deep --sign - "$APP"
+
+      - name: 打成 dmg 与 zip
+        run: |
+          APP=$(find release -maxdepth 3 -name '*.app' -type d | head -1)
+          mkdir -p out
+          hdiutil create -volname "桌面气泡助手" -srcfolder "$APP" -ov -format UDZO "out/桌面气泡助手-macOS.dmg"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "out/桌面气泡助手-macOS.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macOS
+          path: out/*
+
+      - name: 挂到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
