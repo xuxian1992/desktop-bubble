@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { HostDescription } from '../../shared/dsh'
 import { resolveDshInvocation } from '../dsh-manager'
-import { candidateStyles, extractToken, getWebToken, setAuthStyle, setWebToken, withStyle, type AuthStyle } from './auth'
+import { acquireCookie, candidateStyles, extractToken, getCookie, getWebToken, setAuthStyle, setWebToken, withStyle, type AuthStyle } from './auth'
 
 export type SupervisorState = 'idle' | 'probing' | 'spawning' | 'ready' | 'error'
 
@@ -68,6 +68,14 @@ export function getStatus(): SupervisorStatus {
  * 所以不猜，实测。定下来之后所有请求都用它。
  */
 async function probe(base: string, timeoutMs = 1500): Promise<HostDescription | null> {
+  // ★ 关键一步：dsh 0.1.5 的认证是 **Cookie**，而 token 只是「换 Cookie 的凭证」。
+  //   直接拿 token 当查询参数挂到 /api/* 上是没用的（实测 401）。
+  //   所以探活之前，先用 token 去 / 换一次 Cookie。
+  if (getWebToken() && !getCookie()) {
+    const ok = await acquireCookie(base)
+    if (ok) console.log('[dsh] 已用 token 换到认证 Cookie')
+  }
+
   for (const s of candidateStyles()) {
     const r = await probeOnce(base, timeoutMs, s)
     if (r) {

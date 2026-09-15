@@ -16,7 +16,7 @@ import type { RuntimeStatusView } from '@shared/types'
  * 注意顺序不能反：链子是 Node.js → npm → dsh，第一环断了后面全断。
  */
 
-type Phase = 'probing' | 'node' | 'dsh' | 'notRunning' | 'noKey' | 'installing' | 'done' | 'error' | 'ok'
+type Phase = 'probing' | 'node' | 'dsh' | 'version' | 'notRunning' | 'noKey' | 'installing' | 'done' | 'error' | 'ok'
 
 export function DshMissing({
   connected,
@@ -43,6 +43,8 @@ export function DshMissing({
         setRt(r)
         if (!r.node.found) setPhase('node')
         else if (!r.dsh.found) setPhase('dsh')
+        // ★ 版本不匹配单独说 —— 它的症状看起来像环境/配置/认证问题，而那全都不对
+        else if (!r.dshCompatible) setPhase('version')
         else if (!connected) setPhase('notRunning')
         else if (!k.configured) setPhase('noKey')
         else setPhase('ok')
@@ -123,6 +125,19 @@ export function DshMissing({
           <button className="dm-sec" onClick={probe}>重新检测</button>
         </div>
         <p className="dm-note">约 200 MB，走你本机的 npm{rt?.npm.version ? ' v' + rt.npm.version : ''}，可能要几分钟</p>
+      </>) : null}
+
+      {phase === 'version' ? (<>
+        <p className="dm-lead">装着的 <b>dsh 版本不对</b> —— 这就是连不上的原因。</p>
+        <p className="dm-sub">
+          这台机器上是 <b>{rt?.dsh.version}</b>，而气泡只支持 <b>{rt?.expected}</b>。<br />
+          dsh 换过认证方式和接口路径，气泡对着旧版写的，对不上。
+        </p>
+        <div className="dm-acts">
+          <button className="dm-pri" onClick={installDsh}>装回匹配的版本</button>
+          <button className="dm-sec" onClick={probe}>重新检测</button>
+        </div>
+        <p className="dm-note">会覆盖现有的 dsh 安装；dsh 里的会话与配置不受影响</p>
       </>) : null}
 
       {phase === 'notRunning' ? (<>

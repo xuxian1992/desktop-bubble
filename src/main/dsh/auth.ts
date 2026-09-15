@@ -15,10 +15,42 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export type AuthStyle = 'none' | 'query' | 'bearer' | 'x-dsh-token' | 'authorization'
+export type AuthStyle = 'none' | 'cookie' | 'query' | 'bearer' | 'x-dsh-token' | 'authorization'
 
 let token: string | null = null
 let style: AuthStyle = 'none'
+/**
+ * 认证 Cookie。
+ *
+ * ★ 这是 dsh 0.1.5 的真实机制（Hermes 在那台机器上实测出来的）：
+ *
+ *   GET /?token=XXX   →  303 See Other，location: /
+ *                       同时响应头 set-cookie: dsh-auth-<实例id>=v1.<签名>
+ *
+ * **`?token=` 只是「换 Cookie 的凭证」，本身不是认证。**
+ * 我一开始把 token 当查询参数往 /api/* 上挂 —— 结果一直是 401，卡了好几轮。
+ */
+let cookie: string | null = null
+
+export function getCookie(): string | null { return cookie }
+
+/** 用 token 去换 Cookie（303 + Set-Cookie）。成功返回 true。 */
+export async function acquireCookie(base: string): Promise<boolean> {
+  if (!token) return false
+  try {
+    const res = await fetch(base.replace(/\/$/, '') + '/?token=' + encodeURIComponent(token), {
+      redirect: 'manual', // 303 就是我们要的，别跟过去
+    })
+    const sc = res.headers.get('set-cookie')
+    if (!sc) return false
+    // 只要 name=value，属性（Path/HttpOnly/...）不用带
+    cookie = sc.split(';')[0].trim()
+    style = 'cookie'
+    return true
+  } catch {
+    return false
+  }
+}
 
 export function setWebToken(t: string | null): void {
   if (t === token) return
@@ -81,6 +113,7 @@ export function withAuth(url: string): string {
 
 /** 给请求加认证头（头形式时） */
 export function authHeaders(): Record<string, string> {
+  if (cookie) return { cookie }
   if (!token) return {}
   if (style === 'bearer') return { authorization: 'Bearer ' + token }
   if (style === 'x-dsh-token') return { 'x-dsh-token': token }
@@ -90,6 +123,8 @@ export function authHeaders(): Record<string, string> {
 
 /** 探活时依次尝试的顺序（只有真的有 token 时才试后面那些） */
 export function candidateStyles(): AuthStyle[] {
+  // cookie 优先 —— 那才是 0.1.5 的真实机制；其余是给别的版本留的退路
+  if (cookie) return ['cookie', 'none', 'query', 'bearer', 'x-dsh-token', 'authorization']
   return token ? ['none', 'query', 'bearer', 'x-dsh-token', 'authorization'] : ['none']
 }
 

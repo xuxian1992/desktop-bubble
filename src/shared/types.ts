@@ -284,6 +284,10 @@ export interface RuntimeStatusView {
   npm: { found: boolean; version?: string; portable: boolean }
   dsh: DshProbeView
   portableInstalled: boolean
+  /** 气泡对着开发的 dsh 版本 */
+  expected: string
+  /** 装着的版本是否就是气泡支持的那个 */
+  dshCompatible: boolean
 }
 
 export interface IntegrationState {

@@ -5,6 +5,26 @@ import { findPortableDsh, findPortableNode, npmCliJs, portableDshBin } from './n
 
 /** dsh 运行时管理：检测 / 引导安装。安装包不内置 dsh（方案 D3 决策）。 */
 
+/**
+ * 安装哪个版本的 dsh —— **必须钉版本，不能装 latest**。
+ *
+ * ⚠️ 这是用十几轮来回查出来的教训。
+ *
+ * 气泡的 /api 调用、认证方式、下行事件通道，全都是对着**一个具体版本**写的：
+ *
+ *   气泡开发时的版本              0.1.1-rc.2   （无认证，直接 POST /api/<method>）
+ *   用户机器上装到的「最新版」      0.1.5-rc.1   （token → Cookie 认证，路径也变了）
+ *
+ * 后果：**装得上、起得来、连不上**。而症状看起来像安装问题、环境问题、配置问题，
+ * 一路查下去全是错的方向 —— 真正的原因只是「客户端和服务端版本对不上」。
+ *
+ * 什么时候改这个常量：**在真机上确认气泡能在新版本上跑通之后**，而不是 npm 一更新就跟着动。
+ */
+export const DSH_PACKAGE = '@deepseek-ai/dsh@0.1.1-rc.2'
+
+/** 气泡支持的 dsh 版本（用于检测到不匹配时给用户说人话） */
+export const DSH_EXPECTED = '0.1.1-rc.2'
+
 export interface DshProbe {
   found: boolean
   version?: string
@@ -305,6 +325,16 @@ export interface RuntimeStatus {
   dsh: DshProbe
   /** 便携版是否已下载到本机 */
   portableInstalled: boolean
+  /** 气泡对着开发的 dsh 版本 */
+  expected: string
+  /**
+   * 装着的 dsh 版本是否就是气泡支持的那个。
+   *
+   * ⚠️ 不匹配时必须**明确告诉用户**，而不是让他看到「连不上」然后一路瞎查 ——
+   * 这正是我们用十四轮换来的一课：版本不匹配的症状（装得上、起不来、连不上）
+   * 看起来像环境问题、配置问题、认证问题，唯独不像「版本问题」。
+   */
+  dshCompatible: boolean
 }
 
 /**
@@ -321,14 +351,18 @@ export async function probeRuntime(): Promise<RuntimeStatus> {
     ? (await tryRun(sysNodePath, ['-v'], 12000, false))?.trim()
     : (portable ? (await tryRun(portable, ['-v'], 12000, false))?.trim() : undefined)
   const npmProbe = await probeNpm()
+  const dsh = await probeDsh()
+  const compatible = !dsh.found || !dsh.version || dsh.version === DSH_EXPECTED
   return {
+    dsh,
+    expected: DSH_EXPECTED,
+    dshCompatible: compatible,
     node: {
       found: Boolean(sysNodePath) || Boolean(portable),
       version: nodeVer || undefined,
       portable: !sysNodePath && Boolean(portable),
     },
     npm: { found: npmProbe.found, version: npmProbe.version, portable: npmProbe.source === 'portable' },
-    dsh: await probeDsh(),
     portableInstalled: Boolean(portable),
   }
 }
@@ -363,7 +397,7 @@ export function installDsh(onLine: (line: string) => void, onDone: (ok: boolean,
     onLine('使用 ' + inv.label + (sys.version ? ' v' + sys.version : ''))
     onLine('  命令: ' + inv.cmd + ' ' + inv.args.join(' '))
     cmd = inv.cmd
-    args = [...inv.args, 'install', '-g', '@deepseek-ai/dsh']
+    args = [...inv.args, 'install', '-g', DSH_PACKAGE]
     useShell = inv.shell
 
     // ⚠️ 便携版 node 不在系统 PATH 上（我们刻意不改用户的机器）。
