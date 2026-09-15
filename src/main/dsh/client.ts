@@ -1,4 +1,5 @@
 import type { MuxFrame, RpcResult, ServerRequest, ServerResponse } from '../../shared/dsh'
+import { authHeaders, withAuth } from './auth'
 
 /** rpcId 是外层 server-request 的 id —— 回答提问时必须原样回显它 */
 type FrameHandler = (frame: MuxFrame, rpcId: string) => void
@@ -59,9 +60,9 @@ export class DshClient {
     const ac = new AbortController()
     const timer = setTimeout(() => ac.abort(), timeoutMs)
     try {
-      const res = await fetch(this.base + '/api/' + method, {
+      const res = await fetch(withAuth(this.base + '/api/' + method), {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ type: 'client-request', rpcId: 'b' + (++this.rid), method, payload }),
         signal: ac.signal,
       })
@@ -90,9 +91,9 @@ export class DshClient {
    */
   async respond(rpcId: string, value: unknown): Promise<RpcResult<unknown>> {
     try {
-      const res = await fetch(this.base + '/api/respond', {
+      const res = await fetch(withAuth(this.base + '/api/respond'), {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ type: 'client-response', rpcId, result: { ok: true, value } }),
       })
       if (!res.ok) return { ok: false, error: { code: 'http-' + res.status, message: await res.text() } }
@@ -110,7 +111,8 @@ export class DshClient {
   }
 
   private openStream(path: string, isHost: boolean): void {
-    const wsUrl = this.base.replace(/^http/, 'ws') + path
+    // WS 也要带 token —— 否则下行流连不上，表现成「连上了但收不到事件」
+    const wsUrl = withAuth(this.base.replace(/^http/, 'ws') + path)
     let ws: WebSocket
     try {
       ws = new WebSocket(wsUrl)

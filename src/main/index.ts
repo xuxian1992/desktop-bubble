@@ -8,6 +8,7 @@ import { captureDisplay, captureWindow, selectRegion } from './capture'
 import { attachmentsFromClipboard } from './attachments'
 import { DshClient } from './dsh/client'
 import { ensureRunning, stopOwned } from './dsh/supervisor'
+import { loadPersistedToken } from './dsh/auth'
 import { registerAll, unregisterAll } from './hotkeys'
 import { SessionStore } from './store/session-store'
 import type { FormFactor, MonitorMode } from '../shared/types'
@@ -189,6 +190,8 @@ async function boot(): Promise<void> {
 
   createTray()
 
+  // 先读回上次的 web token —— 复用已在跑的 dsh 时，它不会再打印一次
+  loadPersistedToken()
   await connectDsh()
 }
 

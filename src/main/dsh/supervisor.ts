@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { HostDescription } from '../../shared/dsh'
 import { resolveDshInvocation } from '../dsh-manager'
+import { candidateStyles, extractToken, getWebToken, setAuthStyle, setWebToken, withStyle, type AuthStyle } from './auth'
 
 export type SupervisorState = 'idle' | 'probing' | 'spawning' | 'ready' | 'error'
 
@@ -59,14 +60,35 @@ export function getStatus(): SupervisorStatus {
   return status
 }
 
-/** 一次 host.describe 探活：能拿到 value 就说明 /api 可用且信任栅栏放行 */
+/**
+ * 一次 host.describe 探活。
+ *
+ * 有 token 时**依次试几种携带方式**，把能通的那种记进 auth 模块 ——
+ * dsh 没文档说明这个 token 怎么带，而 0.1.5 才有的东西我本机复现不了，
+ * 所以不猜，实测。定下来之后所有请求都用它。
+ */
 async function probe(base: string, timeoutMs = 1500): Promise<HostDescription | null> {
+  for (const s of candidateStyles()) {
+    const r = await probeOnce(base, timeoutMs, s)
+    if (r) {
+      if (getWebToken()) setAuthStyle(s)
+      return r
+    }
+  }
+  return null
+}
+
+async function probeOnce(base: string, timeoutMs: number, s: AuthStyle): Promise<HostDescription | null> {
   const ac = new AbortController()
   const t = setTimeout(() => ac.abort(), timeoutMs)
   try {
-    const res = await fetch(base + '/api/host.describe', {
+    const req = withStyle(
+      { url: base + '/api/host.describe', headers: { 'content-type': 'application/json' } as Record<string, string> },
+      s,
+    )
+    const res = await fetch(req.url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: req.headers,
       body: JSON.stringify({ type: 'client-request', rpcId: 'probe', method: 'host.describe', payload: {} }),
       signal: ac.signal,
     })
@@ -149,6 +171,9 @@ export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatu
         if (!t) continue
         outputTail.push(t)
         if (outputTail.length > RING) outputTail.shift()
+        // 新版 dsh 启动会打印 `.../?token=XXX` —— 抓到它，后面所有请求都要带
+        const tok = extractToken(t)
+        if (tok) setWebToken(tok)
       }
     }
     child.stdout?.on('data', pushTail)

@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
@@ -61,6 +61,38 @@ function readTextProbe(p: string): Record<string, unknown> {
   }
 }
 
+/**
+ * 把整个 .dsh 目录翻一遍（文件名 + 大小，小文件直接给内容）。
+ *
+ * 为什么：新版 dsh（0.1.5+）给 web 加了 **访问 token** ——
+ * 启动时打印 `dsh web: http://127.0.0.1:3080/?token=XXX`。
+ * 气泡探活时不带这个 token 就被拒，表现成「启动超时」。
+ * token 多半落在 .dsh 下某个文件里，所以先把目录翻出来看。
+ */
+function walkDir(root: string, depth = 0, out: Array<Record<string, unknown>> = []): Array<Record<string, unknown>> {
+  if (depth > 3) return out
+  let entries: string[]
+  try { entries = readdirSync(root) } catch { return out }
+  for (const name of entries) {
+    const p = join(root, name)
+    try {
+      const st = statSync(p)
+      if (st.isDirectory()) {
+        out.push({ t: 'd', p: name + '/', n: 0 })
+        walkDir(p, depth + 1, out)
+      } else {
+        const rec: Record<string, unknown> = { t: 'f', p: name, n: st.size }
+        // 小文件多半是配置或 token，直接带上内容
+        if (st.size <= 2048 && /\.(json|txt|yml|yaml|token|key)$/i.test(name)) {
+          try { rec.c = readFileSync(p, 'utf8').slice(0, 1500) } catch { /* ignore */ }
+        }
+        out.push(rec)
+      }
+    } catch { /* 跳过读不了的 */ }
+  }
+  return out
+}
+
 /** 端口被谁占着（Windows） */
 async function portProbe(port: string): Promise<Record<string, unknown>> {
   if (process.platform !== 'win32') return { skipped: true }
@@ -80,7 +112,8 @@ export async function collectDiagnostics(): Promise<Record<string, unknown>> {
   // dsh 自己怎么说 —— 这是最有价值的一段
   const inv = await resolveDshInvocation()
   const version = await runCapture(inv.cmd, [...inv.args, '--version'], 25000, inv.shell)
-  const dump = await runCapture(inv.cmd, [...inv.args, '--dump-config'], 25000, inv.shell)
+  // --dump-config 需要 --profile；dsh 不给就直接回一行 error
+  const dump = await runCapture(inv.cmd, [...inv.args, '--profile', 'web', '--dump-config'], 25000, inv.shell)
 
   return {
     at: new Date().toISOString(),
@@ -96,6 +129,10 @@ export async function collectDiagnostics(): Promise<Record<string, unknown>> {
       agents: readTextProbe(join(home, '.dsh', 'AGENTS.md')),
     },
     port3080: await portProbe('3080'),
+    // 新版 dsh 的 token 藏在这里；顺带也能看出 profile 结构
+    dshHome: walkDir(join(home, '.dsh')),
+    // 从 dsh web 的输出里抓 token（启动时会打印 .../?token=XXX）
+    tokenSeen: (String(dump).match(/token=([A-Za-z0-9_-]+)/) ?? [])[1] ?? null,
   }
 }
 
