@@ -326,7 +326,25 @@ export function Chat({
             detail={bus?.detail ?? ''}
             onReady={() => onDshReady?.()}
           />
-          {bus?.state === 'error' ? null : !cur || cur.loading ? (
+          {bus?.state === 'error' ? null : bus?.state === 'ready' && (snap?.sessions?.length ?? 0) === 0 ? (
+            /*
+             * 「一个会话都没有」要单独处理。
+             * 之前这种情况会掉进下面的「载入中…」分支 —— 而 cur 永远是 null，
+             * 于是界面【永远停在载入中】，新人完全不知道下一步该点哪。
+             */
+            <div className="empty-hint">
+              <div style={{ fontSize: 26, marginBottom: 10 }}>👋</div>
+              <b>还没有会话</b>
+              <div style={{ marginTop: 8, lineHeight: 1.7 }}>
+                气泡是你访问 dsh 的另一个入口。
+                <br />
+                开一个会话就能开始聊。
+              </div>
+              <button className="dm-pri" style={{ marginTop: 14 }} onClick={() => void window.bubble.createSession()}>
+                开始第一个会话
+              </button>
+            </div>
+          ) : !cur || cur.loading ? (
             <div className="empty-hint">载入中…</div>
           ) : cur.error ? (
             <div className="empty-hint">读取会话失败<br />{cur.error}</div>

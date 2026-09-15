@@ -254,16 +254,23 @@ export class SessionStore {
       const rec = this.records.get(raw.sessionId)
       if (rec) rec.running = raw.running
       const vals = raw.projections?.values as Record<string, any> | undefined
-      if (vals && rec) {
+      if (vals) {
+        // 权限档位就写在列表项上 —— 它在【列表阶段】就有，跟会话加载无关。
+        // （原来只在 rec 上写，而遍历列表时 rec 还不存在 → 永远拿不到。这是权限指示器
+        //   从来没显示过的原因。）
+        const pm = vals.permissions
+        if (pm && Array.isArray(pm.options) && pm.currentValue) {
+          const perm = { options: pm.options, currentValue: String(pm.currentValue) }
+          const item = next.get(raw.sessionId)
+          if (item) item.permissions = perm
+          if (rec) rec.permissions = perm
+        }
+      }
+      if (rec && vals) {
         const tu = vals.tokenUsage
         if (tu) rec.tokens = { input: tu.uncachedInputTokens ?? 0, output: tu.outputTokens ?? 0, cacheRead: tu.cacheReadTokens ?? 0 }
         const cp = vals.contextPressure
         if (cp) rec.context = { used: cp.pressureTokens ?? 0, window: cp.contextWindow ?? 0 }
-        // 权限档位：会话投影直接给了「全部选项 + 当前值」，照搬即可
-        const pm = vals.permissions
-        if (pm && Array.isArray(pm.options) && pm.currentValue) {
-          rec.permissions = { options: pm.options, currentValue: String(pm.currentValue) }
-        }
       }
     }
     this.summaries.clear()
@@ -794,7 +801,7 @@ export class SessionStore {
         hasMore: rec.hasMore,
         tokens: rec.tokens,
         context: rec.context,
-        permissions: rec.permissions,
+        permissions: this.summaries.get(rec.sessionId)?.permissions ?? rec.permissions,
       }
     }
 

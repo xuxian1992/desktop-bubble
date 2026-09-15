@@ -148,6 +148,14 @@ export interface SessionSummary {
   agentPreset?: string
   parentSessionId?: string
   isSubagent: boolean
+  /**
+   * 权限档位（read-only / workspace-write / danger-full-access）。
+   *
+   * ★ 它来自 dsh 的**会话列表**（`projections.values.permissions`），不是加载会话才有的东西。
+   * 之前我把它只写在「已加载会话」的 record 上 —— 而遍历列表时 record 还不存在，
+   * 于是**永远拿不到**，权限指示器从来没显示过。
+   */
+  permissions?: PermissionStats
   /** 给侧边栏的状态徽标用（快照里派生，store 内部不存） */
   status?: SessionStatus
   subagentsRunning?: number

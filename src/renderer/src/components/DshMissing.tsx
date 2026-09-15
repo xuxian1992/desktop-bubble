@@ -141,6 +141,11 @@ export function DshMissing({
       </>) : null}
 
       {phase === 'notRunning' ? (<>
+        <p className="dm-sub">
+          环境没问题，但连不上 dsh：
+          <br />
+          dsh <b>{rt?.dsh.version ?? '?'}</b> · 来源 {rt?.dsh.source ?? '?'}
+        </p>
         <p className="dm-lead">dsh 装好了，但<b>没跑起来</b>。</p>
         <p className="dm-sub">它需要作为后台服务运行，气泡才能连上。点下面试试 —— 不用重启气泡。</p>
         <div className="dm-acts">
