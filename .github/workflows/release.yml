@@ -22,6 +22,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      # VCP 内置字体是二进制、不进版本库：构建前从插件仓库拉一份。
+      # 拉不到也不影响构建（卡片回退系统字体），所以 continue-on-error。
+      - name: 同步 VCP 内置字体
+        continue-on-error: true
+        run: node build/sync-fonts.cjs --from-url
+
       - run: npm ci
       - run: npx electron-vite build
 
@@ -40,6 +47,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: 同步 VCP 内置字体
+        continue-on-error: true
+        run: node build/sync-fonts.cjs --from-url
+
       - run: npm ci
       - run: npx electron-vite build
 

@@ -1,0 +1,28 @@
+/**
+ * VCP 卡片（气泡侧）—— 卡片容器。
+ *
+ * 字体不在这里声明：26 款内置字体由 vcpFonts.ts 在运行时注册（见那个文件的注释），
+ * 字体文件走 renderer 的 public/fonts/，不进版本库。
+ */
+
+/* 卡片是按宽屏设计的，气泡最窄只有 380px —— 放不下时横向可滚，而不是被裁掉。 */
+.vcp-card {
+  display: block;
+  margin: 6px 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+
+/* 卡片解析/渲染出意外时的兜底：原样显示源码，绝不吞内容 */
+.vcp-fallback {
+  margin: 6px 0;
+  padding: 8px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border: 1px solid #3a3f4b;
+  border-radius: 6px;
+  background: #1b1e26;
+}

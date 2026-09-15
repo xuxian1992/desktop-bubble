@@ -11,6 +11,14 @@ release/*.exe
 *.dmg
 *.zip.blockmap
 
+# VCP 内置字体（26 款 woff2 · 二进制 · 本是 dsh-raw-html 插件分发的东西）
+# 由 `npm run fonts`（或构建前的 prebuild）同步进来，不进版本库。
+src/renderer/public/fonts/
+
+# 本机部署脚本（写死了本机安装路径）
+deploy-bubble.ps1
+watch-and-deploy.ps1
+
 # 本机测试产物
 proto/
 probe/
