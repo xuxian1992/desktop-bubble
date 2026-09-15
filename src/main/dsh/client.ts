@@ -14,6 +14,39 @@ export type Transport = 'v2' | 'legacy'
  * 旧版是 `/api/events.mux` + `/api/events.host` 两条。
  * 不写死：每条流按候选顺序试，连上就记住。
  */
+/**
+ * 把 v2 `$events` 流上的 `emit` 帧，翻译成气泡内部一直在用的 host/* 帧。
+ *
+ * 事件签名（Hermes 从 session 描述符里抄的原文）：
+ *   api-session/activity'(sessionId, updatedAt)
+ *   api-session/added'   (summary)
+ *   api-session/error'   (sessionId, message)
+ *   api-session/removed' (sessionId)
+ *   api-session/status'  (sessionId, running)
+ *
+ * ⚠️ args 是【数组】（按位置），不是对象 —— 这点很容易写错。
+ */
+function translateEmit(event: string, args: unknown[]): Record<string, unknown> | null {
+  const a0 = args[0] as Record<string, unknown> | undefined
+  switch (event) {
+    case 'api-session/added': {
+      const summary = (a0?.summary ?? a0 ?? {}) as Record<string, unknown>
+      return { type: 'host/session-added', sessionId: summary.sessionId, blank: false, summary }
+    }
+    case 'api-session/removed':
+      return { type: 'host/session-removed', sessionId: typeof a0 === 'string' ? a0 : (a0 as never) }
+    case 'api-session/status':
+      return { type: 'host/session-status', sessionId: args[0], running: Boolean(args[1]) }
+    case 'api-session/error':
+      return { type: 'host/agent-error', sessionId: args[0], message: String(args[1] ?? '') }
+    case 'api-session/activity':
+      return { type: 'host/session-activity', sessionId: args[0], updatedAt: args[1] }
+    default:
+      // 其它事件目前用不上
+      return null
+  }
+}
+
 const MUX_PATHS = ['/api/remote.mux', '/api/events.mux']
 const HOST_PATHS = ['/api/remote.mux', '/api/events.host']
 type StatusHandler = (connected: boolean) => void
@@ -145,6 +178,8 @@ export class DshClient {
   private transport: Transport | null = null
   /** 下行流当前用到的候选下标（连不上就往后试） */
   private muxPathIdx = 0
+  /** v2：当前跟住的会话（换会话时要 cancel 上一条流） */
+  private followedId: string | null = null
   private hostPathIdx = 0
 
   getTransport(): Transport | null { return this.transport }
@@ -284,6 +319,19 @@ export class DshClient {
           this.backoff = 1000
           this.setConnected(true)
           console.log('[dsh] mux ready, clientId=' + (v.clientId ?? '?'))
+          // ready 之后才能开业务流 —— 顺序不能反
+          if (this.followedId) this.followSession(this.followedId)
+          return
+        }
+        // $events 流上的业务帧是 emit —— 事件名和老的 host/* 不同，要翻译
+        const emit = v as { type?: string; event?: string; args?: unknown[] } | undefined
+        if (emit && emit.type === 'emit') {
+          const translated = translateEmit(emit.event ?? '', emit.args ?? [])
+          if (translated) {
+            for (const h of this.hostHandlers) {
+              try { h(translated as never, '') } catch (err) { console.error('[dsh] handler 抛错:', err) }
+            }
+          }
           return
         }
         const handlers = frame.streamId === 'host' ? this.hostHandlers : this.muxHandlers
@@ -364,6 +412,49 @@ export class DshClient {
       this.scheduleReconnect()
     })
     ws.addEventListener('error', () => { /* close 会紧随其后 */ })
+  }
+
+/**
+ * 让 v2 的 mux 跟住某个会话。
+ *
+ * v1 的 mux 流是【自动】跟当前会话的（服务端推 session/subscribed）。
+ * v2 不是 —— 必须显式 open 一条 session/follow，而且 address 是带 kind 的联合类型：
+ *
+ *   { kind:'session', sessionId }                      ← 普通会话
+ *   { kind:'subagent', parentSessionId, childSessionId, mode }
+ *
+ * 从会话列表里拿到的就是 kind:'session' 这一种。
+ */
+  followSession(sessionId: string | null): void {
+    if (this.transport !== 'v2' || !this.muxWs || this.muxWs.readyState !== 1) return
+    // 先撤掉上一条
+    if (this.followedId) {
+      try { this.muxWs.send(JSON.stringify({ type: 'cancel', streamId: 'sess' })) } catch { /* ignore */ }
+      this.followedId = null
+    }
+    if (!sessionId) return
+    try {
+      this.muxWs.send(
+        JSON.stringify({
+          type: 'open',
+          streamId: 'sess',
+          endpoint: 'session/follow',
+          payload: {
+            args: {
+              request: {
+                address: { kind: 'session', sessionId },
+                maxMessages: 50,
+                assistantStream: true,
+              },
+            },
+          },
+        }),
+      )
+      this.followedId = sessionId
+      console.log('[dsh] 已跟住会话 ' + sessionId)
+    } catch (err) {
+      console.error('[dsh] 开 session/follow 失败:', err)
+    }
   }
 
   private scheduleReconnect(): void {

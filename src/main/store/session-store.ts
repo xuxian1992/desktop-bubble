@@ -412,6 +412,8 @@ export class SessionStore {
 
   async open(sessionId: string): Promise<void> {
     this.currentId = sessionId
+    // v2 的下行流要显式跟会话；v1 会自动跟，这里是 no-op
+    this.client.followSession(sessionId)
     const gen = ++this.openGeneration
     const rec = this.ensure(sessionId)
     rec.loading = true
@@ -712,7 +714,7 @@ export class SessionStore {
         .filter((x) => !x.isSubagent && !this.archived.has(x.sessionId))
         .sort((a, b) => b.updatedAt - a.updatedAt)[0]
       if (next) await this.open(next.sessionId)
-      else this.currentId = null
+      else { this.currentId = null; this.client.followSession(null) }
     }
     this.notify(0)
   }
