@@ -162,7 +162,15 @@ function parse(src: string): Block[] {
  * 那些在普通回答里也常出现（比如讲 HTML 的时候），误判会把代码讲成卡片。
  */
 function looksLikeVcp(text: string): boolean {
-  return /<div[^>]*id=["']vcp-root["']/i.test(text)
+  // ⚠️ 先剥掉代码块与行内代码再判。
+  //
+  // 这条不是理论上的顾虑 —— 我第一版就是漏了它，而当场就踩到了：
+  // 有一条**讲解这个判据**的普通回复（里面用反引号引了 `<div id="vcp-root">`），
+  // 被正则命中，差点当卡片渲染。
+  //
+  // 谈论 HTML 的消息里会大段引用标签，那些都是「提到」而不是「是」。
+  const stripped = text.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '')
+  return /<div[^>]*id=["']vcp-root["']/i.test(stripped)
 }
 
 /**

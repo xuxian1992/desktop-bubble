@@ -138,6 +138,7 @@ export default function App() {
           onCopy={(t) => void window.bubble.copyText(t)}
           dshMissing={needDsh}
           onDshReady={() => void probeEnv(true)}
+          onPatch={patch}
         />
       )}
       <ResizeHandles />

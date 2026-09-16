@@ -35,7 +35,7 @@ async function fileToBase64(f: File): Promise<string> {
 
 export function Chat({
   snap, state, config, perception, onOpenSettings, onOpenLink, onCopy,
-  dshMissing, onDshReady,
+  dshMissing, onDshReady, onPatch,
 }: {
   snap: Snapshot | null
   state: BubbleState
@@ -48,6 +48,13 @@ export function Chat({
   /** supervisor 给的诊断（含 dsh web 最后几行输出） */
   onDshReady?: () => void
   onCopy: (text: string) => void
+  /**
+   * 改配置。
+   *
+   * ⚠️ 必须走这个，不能直接调 `window.bubble.patchConfig` ——
+   * 后者只落盘，**不会回灌 App 的 config 状态**，于是开关点了没反应。
+   */
+  onPatch: (p: Partial<BubbleConfig>) => void
 }) {
   const [draft, setDraft] = useState('')
   const taRef = useRef<HTMLTextAreaElement | null>(null)
@@ -440,7 +447,7 @@ export function Chat({
             <button
               className={'htmlsw' + (rawHtml ? ' on' : '')}
               title={rawHtml ? 'HTML 渲染已开启 —— 点一下关掉（消息里的标签会按纯文本显示）' : 'HTML 渲染已关闭 —— 点一下开启'}
-              onClick={() => void window.bubble.patchConfig({ rawHtml: !rawHtml })}
+              onClick={() => onPatch({ rawHtml: !rawHtml })}
             >
               {'</>'}<i>{rawHtml ? 'ON' : 'OFF'}</i>
             </button>
