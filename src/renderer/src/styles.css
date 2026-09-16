@@ -105,7 +105,21 @@ code {
 .cmp { flex: none; padding: 9px 11px 7px; border-top: 1px solid var(--line); }
 .box { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.095); border-radius: 14px; padding: 8px 8px 8px 12px; }
 .box:focus-within { border-color: rgba(77,107,254,0.5); }
-.box input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--text); font-size: 12.5px; font-family: inherit; }
+/* 输入区从 <input> 换成了 <textarea>：input 天生单行，换行/撑高/纵向滚动都做不到 */
+.box { align-items: flex-end; }
+.box .ta {
+  flex: 1; min-width: 0;
+  background: transparent; border: 0; outline: 0;
+  color: var(--text); font-size: 12.5px; font-family: inherit; line-height: 1.55;
+  resize: none;              /* 高度由 JS 按内容算，不要用户手动拖 */
+  overflow-y: hidden;        /* 未超上限时不出现滚动条 */
+  max-height: 148px;
+  padding: 0;
+  scrollbar-width: thin;
+}
+.box .ta::placeholder { color: #6e7686; }
+.box .ta::-webkit-scrollbar { width: 6px; }
+.box .ta::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 3px; }
 .box input::placeholder { color: #6e7686; }
 .send { width: 28px; height: 28px; flex: none; border: 0; border-radius: 9px; background: var(--accent); color: #fff; font-size: 12px; cursor: pointer; }
 .send:disabled { opacity: .45; cursor: default; }

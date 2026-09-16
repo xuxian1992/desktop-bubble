@@ -50,6 +50,22 @@ export function Chat({
   onCopy: (text: string) => void
 }) {
   const [draft, setDraft] = useState('')
+  const taRef = useRef<HTMLTextAreaElement | null>(null)
+
+  /**
+   * 让输入框随内容长高，长到上限就不再长、改成内部滚动。
+   *
+   * 先把 height 归零才能量出真实的 scrollHeight —— 否则量到的是上一次的高度，越量越大。
+   */
+  const TA_MAX = 148
+  const growTa = (): void => {
+    const el = taRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const h = Math.min(el.scrollHeight, TA_MAX)
+    el.style.height = h + 'px'
+    el.style.overflowY = el.scrollHeight > TA_MAX ? 'auto' : 'hidden'
+  }
   const [attach, setAttach] = useState<Attachment[]>([])
   const [pop, setPop] = useState<null | 'cap' | 'file' | 'more' | 'model' | 'effort' | 'mon' | 'perm'>(null)
   const [busy, setBusy] = useState(false)
@@ -186,6 +202,11 @@ export function Chat({
     const items = attach
     setDraft('')
     setAttach([])
+    // 发完把输入框缩回一行 —— 否则它一直停在撑开的高度上
+    requestAnimationFrame(() => {
+      const el = taRef.current
+      if (el) { el.style.height = 'auto'; el.style.overflowY = 'hidden' }
+    })
     void window.bubble.prompt(text, items)
   }
 
@@ -380,12 +401,28 @@ export function Chat({
           ) : null}
 
           <div className="box">
-            <input
+            {/*
+             * 必须是 textarea，不能是 input。
+             *
+             * `<input>` 天生单行 —— 换行、撑高、纵向滚动这三件事一个都做不到，
+             * 所以 Shift+Enter 在它里面**什么都不发生**（不是被拦截，是根本没有这个概念）。
+             * 想让它像网页端那样写，只能换 textarea 自己管高度。
+             */}
+            <textarea
+              ref={taRef}
+              className="ta"
+              rows={1}
               value={draft}
-              placeholder={busy ? '正在处理…' : attach.length ? '对这些附件问点什么…' : ready ? '问点什么…' : '等待 dsh 连接…'}
+              placeholder={busy ? '正在处理…' : attach.length ? '对这些附件问点什么…' : ready ? '问点什么… Shift+Enter 换行' : '等待 dsh 连接…'}
               disabled={!ready}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+              onChange={(e) => { setDraft(e.target.value); growTa() }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  send()
+                }
+                // Shift+Enter 走默认行为 —— 就是换行，不拦
+              }}
             />
             <button className={'ic' + (pop === 'file' ? ' on' : '')} title="上传文件 / 截图" onClick={() => setPop(pop === 'file' ? null : 'file')}>📎</button>
             {running ? (
