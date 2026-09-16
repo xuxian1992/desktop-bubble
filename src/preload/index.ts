@@ -56,6 +56,7 @@ const api: BubbleApi = {
   providerSetKey: (p: ProviderEntryView, v: string) => invoke('provider:setKey', p, v) as Promise<{ ok: boolean; error?: string }>,
   providerKeyState: (p: ProviderEntryView) => invoke('provider:keyState', p) as Promise<{ configured: boolean; writable: boolean }>,
   providerDetail: (p: ProviderEntryView) => invoke('provider:detail', p) as Promise<ProviderDetailView>,
+  vcpFonts: () => invoke('setup:vcpFonts') as Promise<{ dir: string; names: Array<{ name: string; file: string }> }>,
   providerSetField: (ns: string, path: string[], v: unknown) => invoke('provider:setField', ns, path, v) as Promise<{ ok: boolean; error?: string }>,
   refresh: () => invoke('dsh:refresh') as Promise<void>,
   answerInbox: (itemId: string, answer: InboxAnswer) =>

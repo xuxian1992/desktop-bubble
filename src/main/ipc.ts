@@ -1,5 +1,6 @@
 import { app, clipboard, ipcMain, shell } from 'electron'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
   Attachment, DiaryEntryView, FormFactor, HotkeyAction, InboxAnswer, IntegrationState,
@@ -190,6 +191,25 @@ export function registerIpc(store: SessionStore): void {
 
   // ⚠️ 引用名要先问 dsh（profile 的 apiKeyEnv），不能硬推导 ——
   //    内置的 deepseek-official 用的是 DEEPSEEK_API_KEY，推导会得到错的名字。
+  /**
+   * VCP 插件的字体目录。
+   *
+   * 不从安装包带字体 —— 那是 55MB，而**装了 VCP 的机器上本来就有**。
+   * 没装的用户也用不到 VCP 卡片，字体也就无从谈起。
+   * 所以这里只负责「找到就告诉你，找不到就拉倒」。
+   */
+  ipcMain.handle('setup:vcpFonts', () => {
+    const dir = join(homedir(), '.dsh', 'plugins', 'dsh-raw-html', 'assets', 'fonts')
+    try {
+      const names = readdirSync(dir)
+        .filter((f) => f.toLowerCase().endsWith('.woff2'))
+        .map((f) => ({ name: f.replace(/\.woff2$/i, ''), file: f }))
+      return { dir, names }
+    } catch {
+      return { dir, names: [] }
+    }
+  })
+
   ipcMain.handle('provider:detail', (_e, p: ProviderEntry) => store.readProviderDetail(p))
 
   ipcMain.handle('provider:setField', (_e, ns: string, path: string[], value: unknown) =>

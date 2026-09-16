@@ -39,6 +39,31 @@ export default function App() {
     else setNeedDsh(true)
   }, [])
 
+  /**
+   * 把 VCP 插件自带的字体注册进来。
+   *
+   * 卡片里的 `font-family:'Lanxi-XXX'` 在 web 端由 dsh-raw-html 插件全局注册；
+   * 气泡是另一套渲染，不注册的话字体全部退化成系统黑体 ——
+   * 而字体是那些卡片最显眼的部分之一。
+   *
+   * 字体文件不从安装包带（55MB），直接引用插件目录里的文件。
+   * 没装插件的机器拿到空名单，跳过就行 —— 那种情况本来也没有卡片要渲染。
+   */
+  useEffect(() => {
+    void window.bubble.vcpFonts().then(({ dir, names }) => {
+      if (!names.length) return
+      const base = 'file:///' + dir.replace(/\\/g, '/')
+      const css = names
+        .map((n) => "@font-face{font-family:'" + n.name + "';src:url('" + base + '/' + n.file + "') format('woff2');font-display:swap}")
+        .join('\n')
+      const el = document.createElement('style')
+      el.id = 'vcp-fonts'
+      el.textContent = css
+      document.head.appendChild(el)
+      console.log('[vcp] 已注册 ' + names.length + ' 个字体')
+    })
+  }, [])
+
   useEffect(() => {
     void window.bubble.getState().then(setState)
     void window.bubble.getConfig().then((c) => {

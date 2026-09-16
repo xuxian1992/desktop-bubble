@@ -76,6 +76,7 @@ export function Chat({
   const bus = snap?.bus
   const cur = snap?.current
   const ready = bus?.state === 'ready'
+  const rawHtml = config?.rawHtml !== false
   const running = Boolean(cur?.running)
   const inboxCount = snap?.inbox.length ?? 0
   const sidebarOpen = state.sidebarOpen
@@ -374,7 +375,7 @@ export function Chat({
           ) : (
             cur.rows.map((r, i) => (
               <Fragment key={r.id + ':' + i}>
-                <Row row={r} markdown={config?.markdown !== false} onLink={onOpenLink} onCopy={onCopy} />
+                <Row row={r} markdown={config?.markdown !== false} rawHtml={config?.rawHtml !== false} onLink={onOpenLink} onCopy={onCopy} />
               </Fragment>
             ))
           )}
@@ -430,6 +431,19 @@ export function Chat({
             ) : (
               <button className="send" onClick={send} disabled={(!draft.trim() && attach.length === 0) || !ready} title="发送">↑</button>
             )}
+            {/*
+             * HTML 渲染开关，对齐 dsh web 端那个 </> 按钮。
+             *
+             * 那边它是 dsh-raw-html 插件（platform: web）提供的，气泡用不了那个插件，
+             * 所以在这里重做一份 —— 状态存在气泡自己的配置里。
+             */}
+            <button
+              className={'htmlsw' + (rawHtml ? ' on' : '')}
+              title={rawHtml ? 'HTML 渲染已开启 —— 点一下关掉（消息里的标签会按纯文本显示）' : 'HTML 渲染已关闭 —— 点一下开启'}
+              onClick={() => void window.bubble.patchConfig({ rawHtml: !rawHtml })}
+            >
+              {'</>'}<i>{rawHtml ? 'ON' : 'OFF'}</i>
+            </button>
           </div>
 
           <div className="sub">
@@ -580,8 +594,8 @@ function effortLabel(id?: string): string {
   return id ?? '—'
 }
 
-function Row({ row, markdown, onLink, onCopy }: {
-  row: ChatRow; markdown: boolean; onLink: (u: string) => void; onCopy: (t: string) => void
+function Row({ row, markdown, rawHtml, onLink, onCopy }: {
+  row: ChatRow; markdown: boolean; rawHtml: boolean; onLink: (u: string) => void; onCopy: (t: string) => void
 }) {
   const [openReason, setOpenReason] = useState(false)
   switch (row.kind) {
@@ -605,7 +619,7 @@ function Row({ row, markdown, onLink, onCopy }: {
           ) : null}
           {row.text ? (
             <div className="msg ai">
-              {markdown ? <Markdown text={row.text} onLink={onLink} onCopy={onCopy} /> : row.text}
+              <Markdown text={row.text} markdown={markdown} rawHtml={rawHtml} onLink={onLink} onCopy={onCopy} />
               {row.streaming ? <span className="cur" /> : null}
             </div>
           ) : null}

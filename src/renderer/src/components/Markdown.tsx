@@ -155,7 +155,58 @@ function parse(src: string): Block[] {
   return blocks
 }
 
-export function Markdown({ text, onLink, onCopy }: { text: string; onLink?: (url: string) => void; onCopy?: (t: string) => void }) {
+/**
+ * 这段文本是一个 VCP 卡片（而不是普通 Markdown）吗？
+ *
+ * 判据刻意保守 —— 只认「明确的 HTML 容器」，不认零散的 `<b>` 之类：
+ * 那些在普通回答里也常出现（比如讲 HTML 的时候），误判会把代码讲成卡片。
+ */
+function looksLikeVcp(text: string): boolean {
+  return /<div[^>]*id=["']vcp-root["']/i.test(text)
+}
+
+/**
+ * 去掉 <script> —— 我们不希望消息里的脚本在气泡里执行。
+ *
+ * VCP 规范本身就要求卡片**不写 script**（只用内联样式和 CSS），
+ * 所以剥掉它不会影响任何正常卡片，却堵住了最直接的一条路。
+ */
+function stripScripts(html: string): string {
+  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '').replace(/<script\b[^>]*\/?>/gi, '')
+}
+
+/**
+ * 消息渲染器。
+ *
+ * ⚠️ 关于 `dangerouslySetInnerHTML`：
+ *
+ * 这个组件原本**刻意不用它**（文件顶部写着「零 XSS 面」）。
+ * 但 VCP 卡片要生效就必须真的把 HTML 挂进 DOM —— 这是这个功能本身的性质，
+ * 不是可以绕过的实现细节。折中是：
+ *
+ *   ① 只在 `rawHtml` 开关打开时走这条路（关掉就退化成纯文本）
+ *   ② 只对**明确带 `#vcp-root` 的文本**生效，普通回答一律走原来的解析器
+ *   ③ 剥掉 <script>
+ *
+ * 三条都不是「彻底安全」，是「把面收窄到功能本身需要的那一点」。
+ */
+export function Markdown({
+  text,
+  markdown = true,
+  rawHtml = true,
+  onLink,
+  onCopy,
+}: {
+  text: string
+  markdown?: boolean
+  rawHtml?: boolean
+  onLink?: (url: string) => void
+  onCopy?: (t: string) => void
+}) {
+  if (rawHtml && looksLikeVcp(text)) {
+    return <div className="md md-vcp" dangerouslySetInnerHTML={{ __html: stripScripts(text) }} />
+  }
+  if (!markdown) return <div className="md"><p>{text}</p></div>
   const blocks = parse(text)
   return (
     <div className="md">

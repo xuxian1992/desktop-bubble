@@ -14,6 +14,16 @@ export const DEFAULTS: BubbleConfig = {
   autoLaunchDsh: true,
   alwaysOnTop: true,
   markdown: true,
+  /**
+   * 是否把消息里的 HTML 真正渲染出来（VCP 视觉通感协议）。
+   *
+   * ★ 默认开启，与 dsh web 端保持一致 —— 那边的 dsh-raw-html 插件自检时
+   *   会把没设置过的 `dsh.rawHtml` 落盘成 '1'。两边不一致的话，
+   *   同一段消息在气泡里是字面量、在网页里是卡片，看起来像「气泡坏了」。
+   *
+   * 关掉之后 HTML 按纯文本显示 —— 排查渲染问题、或者不想让消息里的标签生效时用。
+   */
+  rawHtml: true,
   inlineLimitBytes: 200 * 1024,
   imageMaxEdge: 1280,
   integrated: false,
@@ -70,6 +80,7 @@ function normalize(raw: Partial<BubbleConfig>): BubbleConfig {
     autoLaunchDsh: raw.autoLaunchDsh !== false,
     alwaysOnTop: raw.alwaysOnTop !== false,
     markdown: raw.markdown !== false,
+    rawHtml: raw.rawHtml !== false,
     inlineLimitBytes: Number(raw.inlineLimitBytes) || DEFAULTS.inlineLimitBytes,
     imageMaxEdge: Number(raw.imageMaxEdge) || DEFAULTS.imageMaxEdge,
     integrated: raw.integrated === true,

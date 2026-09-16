@@ -542,6 +542,29 @@ code {
 .ms-field .srename { flex: 1; min-width: 0; }
 .ms-hint { margin-top: 7px; font-size: 11px; line-height: 1.6; color: var(--dim2, #6e7686); }
 
+/* ---- HTML 渲染开关（对齐 dsh web 端的 </> 按钮）---- */
+.htmlsw {
+  display: flex; align-items: center; gap: 3px; flex: none;
+  padding: 4px 7px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.12); background: transparent;
+  color: var(--dim2, #6e7686); font-size: 10.5px; line-height: 1;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+.htmlsw:hover { background: rgba(255, 255, 255, 0.07); }
+.htmlsw.on { color: #7ee0a0; border-color: rgba(126, 224, 160, 0.42); }
+.htmlsw i { font-style: normal; font-size: 8.5px; letter-spacing: 0.3px; }
+
+/* ---- VCP 卡片容器 ---- */
+.md-vcp {
+  /* 卡片自带样式（#vcp-root 内有 <style>），容器只负责不干扰它 */
+  line-height: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+/* 卡片里的图片不能撑破气泡 */
+.md-vcp img { max-width: 100%; height: auto; }
+.md-vcp svg { max-width: 100%; }
+
 .dshmiss-msg .dm-selrow { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
 .dshmiss-msg .dm-selrow .dm-note { flex: 1; }
 .dshmiss-msg .dm-pri[disabled] { opacity: .45; cursor: default; }

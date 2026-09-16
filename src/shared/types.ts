@@ -60,6 +60,8 @@ export interface BubbleConfig {
   alwaysOnTop: boolean
   /** Markdown 渲染开关 */
   markdown: boolean,
+  /** 把消息里的 HTML 真正渲染出来（VCP）；关掉则按纯文本显示 */
+  rawHtml: boolean,
   /** 小文件内联阈值（字节） */
   inlineLimitBytes: number,
   /** 图片压缩长边上限 */
@@ -379,6 +381,8 @@ export interface BubbleApi {
   providerKeyState(p: ProviderEntryView): Promise<{ configured: boolean; writable: boolean }>
   /** 读某个供应商的生效配置（API 地址、凭据名、模型列表） */
   providerDetail(p: ProviderEntryView): Promise<ProviderDetailView>
+  /** VCP 插件自带的字体目录（装了才有；没装返回空名单） */
+  vcpFonts(): Promise<{ dir: string; names: Array<{ name: string; file: string }> }>
   /** 改一个配置字段（走 settings.mutate 的路径 op） */
   providerSetField(ns: string, path: string[], value: unknown): Promise<{ ok: boolean; error?: string }>,
   refresh(): Promise<void>
