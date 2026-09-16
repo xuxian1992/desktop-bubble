@@ -8,7 +8,6 @@
  * 解析不了的内容一律按纯文本渲染，绝不吞内容。
  */
 import { Fragment, type ReactNode } from 'react'
-import { VcpCard, extractVcpBlock } from './VcpCard'
 
 /* ---------------- 行内 ---------------- */
 
@@ -80,10 +79,8 @@ interface TextBlock { type: 'heading'; level: number; text: string }
 interface QuoteBlock { type: 'quote'; text: string }
 interface ParaBlock { type: 'para'; text: string }
 interface HrBlock { type: 'hr' }
-/** VCP 视觉卡片：模型输出的 HTML，交给 VcpCard 消毒后渲染（见 VcpCard.tsx）。 */
-interface VcpBlock { type: 'vcp'; html: string }
 
-type Block = CodeBlock | ListBlock | TableBlock | TextBlock | QuoteBlock | ParaBlock | HrBlock | VcpBlock
+type Block = CodeBlock | ListBlock | TableBlock | TextBlock | QuoteBlock | ParaBlock | HrBlock
 
 function splitRow(line: string): string[] {
   return line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim())
@@ -97,10 +94,6 @@ function parse(src: string): Block[] {
     const line = lines[i]
 
     if (!line.trim()) { i++; continue }
-
-    // VCP 卡片：整张吃掉再消毒渲染。没闭合（流式中间态）→ 落回普通文本
-    const vcp = extractVcpBlock(lines, i)
-    if (vcp) { blocks.push({ type: 'vcp', html: vcp.html }); i = vcp.next; continue }
 
     // 围栏代码
     const fence = line.match(/^\s*```(\S*)/)
@@ -210,8 +203,6 @@ export function Markdown({ text, onLink, onCopy }: { text: string; onLink?: (url
                 </tbody>
               </table>
             )
-          case 'vcp':
-            return <VcpCard key={key} html={b.html} />
           default:
             return <p key={key}>{inline(b.text, key, onLink)}</p>
         }

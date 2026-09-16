@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ModelSettings } from './ModelSettings'
 import type {
   BubbleConfig, DiaryEntryView, DshProbeView, HotkeyAction, IntegrationState, MonitorMode, PerceptionView,
   RuntimeStatusView,
@@ -186,6 +187,8 @@ export function SettingsView({ config, onPatch, onBack, dshUrl }: {
             <>
               <h4>通用</h4>
               <div className="desc">气泡的启动、常驻与窗口行为</div>
+
+              <ModelSettings />
               <div className="sect">
                 <div className="ttl">启动</div>
                 <Row label="开机自动启动" hint="登录 Windows 后自动运行，常驻托盘">

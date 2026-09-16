@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ProviderSetup } from './ProviderSetup'
 import type { RuntimeStatusView } from '@shared/types'
 
 /**
@@ -159,23 +160,12 @@ export function DshMissing({
       </>) : null}
 
       {phase === 'noKey' ? (<>
-        <p className="dm-lead">dsh 跑起来了，但<b>还差一个 API Key</b>。</p>
-        <p className="dm-sub">没有它我连不上模型 —— 发消息会失败。填一次就够。</p>
-        <div className="dm-keyrow">
-          <input
-            className="dm-input"
-            type="password"
-            placeholder="sk-…"
-            value={key}
-            onChange={(e) => { setKey(e.target.value); setKeyMsg('') }}
-            onKeyDown={(e) => { if (e.key === 'Enter') void saveKey() }}
-          />
-          <button className="dm-pri" disabled={key.trim().length < 8} onClick={() => void saveKey()}>保存</button>
-        </div>
-        {keyMsg ? <p className="dm-note" style={{ color: keyMsg.includes('已保存') ? '#7ee0a0' : '#ffb3b3' }}>{keyMsg}</p> : null}
+        <p className="dm-lead">dsh 跑起来了，但<b>还没有可用的模型</b>。</p>
+        <p className="dm-sub">挑一个供应商、填它的 API Key 就行 —— 一次搞定。</p>
+        <ProviderSetup onDone={probe} />
         <details className="dm-more">
-          <summary>不知道去哪拿？看这张图</summary>
-          <p className="dm-note">在 dsh web 界面里：设置 → 模型 → 添加提供方 → 填 DeepSeek 的 API Key</p>
+          <summary>不知道去哪拿 Key？看这张图</summary>
+          <p className="dm-note">在 dsh web 界面里：设置 → 模型 → 添加提供方 → 填 API Key</p>
           {guideImg ? <img className="dm-guide" src={guideImg} alt="API Key 设置指引" /> : null}
         </details>
       </>) : null}

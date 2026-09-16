@@ -1,4 +1,16 @@
 import type { DshClient } from '../dsh/client'
+import {
+  describeCredentials,
+  discoverModels,
+  listProviders,
+  resolveApiKeyEnv,
+  setSetting,
+  readProviderDetail,
+  type ProviderDetail,
+  type CredentialState,
+  type DiscoveredModel,
+  type ProviderEntry,
+} from '../providers'
 import type { MuxFrame, RawSessionSummary, SessionEventEnvelope } from '../../shared/dsh'
 import type {
   Attachment, ChatRow, ContextStats, InboxAnswer, InboxItem, ModelCatalogView, ModelGroup,
@@ -765,6 +777,34 @@ export class SessionStore {
       'credentials.describe', { refs: [ref] })
     const v = r?.credentials?.[ref]
     return { configured: v?.configured === true, writable: v?.writable !== false }
+  }
+
+  /* ---- 供应商 / 模型（全部走 dsh 自己的接口，见 providers.ts 顶部的说明）---- */
+
+  listProviders(): Promise<ProviderEntry[]> {
+    return listProviders(this.client)
+  }
+
+  discoverModels(settingsNs: string, provider: string): Promise<{ models: DiscoveredModel[]; error?: string }> {
+    return discoverModels(this.client, settingsNs, provider)
+  }
+
+  /** 查某个路由真正用的凭据引用名（先看 profile 的 apiKeyEnv，再兜底派生） */
+  resolveApiKeyEnv(p: ProviderEntry): Promise<string> {
+    return resolveApiKeyEnv(this.client, p)
+  }
+
+  readProviderDetail(p: ProviderEntry): Promise<ProviderDetail> {
+    return readProviderDetail(this.client, p)
+  }
+
+  /** 改一个配置字段（API 地址等）—— 走路径 op，绝不整段替换 */
+  setSetting(ns: string, path: string[], value: unknown): Promise<{ ok: boolean; error?: string }> {
+    return setSetting(this.client, ns, path, value)
+  }
+
+  describeCredential(ref: string): Promise<CredentialState> {
+    return describeCredentials(this.client, [ref]).then((m) => m[ref] ?? { configured: false, writable: true })
   }
 
   /** 写入密钥。只在这一个方向上传值，绝不回读。 */

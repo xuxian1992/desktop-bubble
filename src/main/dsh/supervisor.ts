@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { HostDescription } from '../../shared/dsh'
 import { resolveDshInvocation } from '../dsh-manager'
-import { acquireCookie, candidateStyles, extractToken, getCookie, getWebToken, setAuthStyle, setWebToken, withStyle, type AuthStyle } from './auth'
+import { acquireCookie, authHeaders, candidateStyles, extractToken, getCookie, getWebToken, setAuthStyle, setWebToken, withStyle, type AuthStyle } from './auth'
 
 export type SupervisorState = 'idle' | 'probing' | 'spawning' | 'ready' | 'error'
 
@@ -94,9 +94,14 @@ async function probeOnce(base: string, timeoutMs: number, s: AuthStyle): Promise
       { url: base + '/api/host.describe', headers: { 'content-type': 'application/json' } as Record<string, string> },
       s,
     )
+    // ⚠️ 必须把 authHeaders() 也带上 —— 它才是负责 **Cookie** 的那个。
+    //    withStyle 只管 query/bearer/x-dsh-token/authorization 四种，
+    //    而 dsh 0.1.5 用的恰恰是 Cookie —— 只调 withStyle 会让探活永远不带认证，
+    //    于是「dsh 明明跑起来了却探测不到」，界面停在「未连接」。
+    const headers = { ...req.headers, ...authHeaders() }
     const res = await fetch(req.url, {
       method: 'POST',
-      headers: req.headers,
+      headers,
       body: JSON.stringify({ type: 'client-request', rpcId: 'probe', method: 'host.describe', payload: {} }),
       signal: ac.signal,
     })
@@ -122,7 +127,13 @@ async function waitReady(base: string, deadline: number): Promise<boolean> {
  * 确保 dsh web 在跑：先探活复用，不行才自己拉一个。
  * 复用时不持有子进程，退出也不杀它。
  */
-export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatus> {
+/**
+ * 确保 dsh 可用：探活 → 必要时拉起。
+ *
+ * `allowSpawn=false` 时**只探活、绝不启动进程** —— 这是 `autoLaunchDsh: false` 的语义：
+ * 用户可能自己想管 dsh（甚至跑在另一台机器上），我们要能连上但不该越界去起进程。
+ */
+export async function ensureRunning(base = DEFAULT_URL, allowSpawn = true): Promise<SupervisorStatus> {
   setStatus({ url: base, state: 'probing', detail: undefined })
 
   const port = new URL(base).port || '3080'
@@ -153,6 +164,13 @@ export async function ensureRunning(base = DEFAULT_URL): Promise<SupervisorStatu
       try { process.kill(owner.pid) } catch { /* 权限不够就算了 */ }
       await new Promise((r) => setTimeout(r, 1500))
     }
+  }
+
+  // 走到这里说明探活失败。如果调用方不允许我们拉起进程，就到此为止 ——
+  // 把「探了但没有」如实报回去，而不是偷偷起一个。
+  if (!allowSpawn) {
+    setStatus({ state: 'error', detail: 'dsh 没在跑，而「开机自动启动 dsh」是关着的 —— 请自行启动，或打开那个开关' })
+    return status
   }
 
   // ⚠️ 关键是**环境和调用方式**，不只是命令本身：

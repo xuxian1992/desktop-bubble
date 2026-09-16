@@ -10,6 +10,8 @@ import { installDsh, probeDsh, probeNpm, probeRuntime } from './dsh-manager'
 import { installPortableNode, nodeRuntimeDir, removePortableNode } from './node-runtime'
 import { installIntegration, isIntegrated, removeIntegration, resourceRoot } from './dsh-integration'
 import { ensureRunning } from './dsh/supervisor'
+import { validateApiKey } from './providers'
+import type { ProviderEntry } from './providers'
 import { collectDiagnostics, sendDiagnostics } from './diagnostics'
 import { screenshotDirOf } from './capture'
 import type { SessionStore } from './store/session-store'
@@ -178,6 +180,34 @@ export function registerIpc(store: SessionStore): void {
     if (v.length < 8) return { ok: false, error: '看起来不像一个密钥' }
     return store.setCredential('DEEPSEEK_API_KEY', v)
   })
+  /* ---- 供应商 / 模型 ---- */
+
+  ipcMain.handle('provider:list', () => store.listProviders())
+
+  ipcMain.handle('provider:discover', (_e, settingsNs: string, provider: string) =>
+    store.discoverModels(settingsNs, provider),
+  )
+
+  // ⚠️ 引用名要先问 dsh（profile 的 apiKeyEnv），不能硬推导 ——
+  //    内置的 deepseek-official 用的是 DEEPSEEK_API_KEY，推导会得到错的名字。
+  ipcMain.handle('provider:detail', (_e, p: ProviderEntry) => store.readProviderDetail(p))
+
+  ipcMain.handle('provider:setField', (_e, ns: string, path: string[], value: unknown) =>
+    store.setSetting(ns, path, value),
+  )
+
+  ipcMain.handle('provider:keyState', (_e, p: ProviderEntry) =>
+    store.resolveApiKeyEnv(p).then((ref) => store.describeCredential(ref)),
+  )
+
+  ipcMain.handle('provider:setKey', async (_e, p: ProviderEntry, value: string) => {
+    // 格式校验放在写入之前 —— 免得白跑一趟，也免得把一个错的密钥存进去
+    const v = validateApiKey(String(value ?? ''))
+    if (!v.ok) return { ok: false, error: v.error }
+    const ref = await store.resolveApiKeyEnv(p)
+    return store.setCredential(ref, String(value).trim())
+  })
+
   ipcMain.handle('setup:openNodeDownload', async () => { await shell.openExternal('https://nodejs.org/zh-cn/download') })
   ipcMain.handle('setup:installDsh', (e) => {
     installDsh(

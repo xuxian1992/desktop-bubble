@@ -217,6 +217,29 @@ export interface SessionView {
  */
 export interface PermissionOption { value: string; name: string }
 
+export interface ProviderEntryView {
+  provider: string
+  displayName: string
+  settingsNs: string
+  settingsPath: Array<string | number>
+  active: boolean
+  declared: boolean
+}
+
+export interface ProviderDetailView {
+  baseURL: string
+  apiKeyEnv: string
+  displayName: string
+  models: DiscoveredModelView[]
+}
+
+export interface DiscoveredModelView {
+  id: string
+  name: string
+  contextWindow?: number
+  maxTokens?: number
+}
+
 export interface PermissionStats {
   options: PermissionOption[]
   currentValue: string
@@ -344,7 +367,20 @@ export interface BubbleApi {
   /** 把诊断推给指定地址 */
   diagSend(url: string): Promise<{ ok: boolean; detail: string }>
   /** 存成文件并打开所在目录 */
-  diagSave(): Promise<{ ok: boolean; path: string }>,
+  diagSave(): Promise<{ ok: boolean; path: string }>
+
+  /** 供应商目录（内置 38 个 + 用户自己声明的） */
+  providerList(): Promise<ProviderEntryView[]>
+  /** 问供应商端点「你有哪些模型」—— 自动拉取 */
+  providerDiscover(settingsNs: string, provider: string): Promise<{ models: DiscoveredModelView[]; error?: string }>
+  /** 写入某个路由的 API 密钥（走 dsh 的 credentials.set） */
+  providerSetKey(p: ProviderEntryView, value: string): Promise<{ ok: boolean; error?: string }>
+  /** 查某个路由的密钥是否已配置（引用名由 dsh 的 apiKeyEnv 决定，不是推导出来的） */
+  providerKeyState(p: ProviderEntryView): Promise<{ configured: boolean; writable: boolean }>
+  /** 读某个供应商的生效配置（API 地址、凭据名、模型列表） */
+  providerDetail(p: ProviderEntryView): Promise<ProviderDetailView>
+  /** 改一个配置字段（走 settings.mutate 的路径 op） */
+  providerSetField(ns: string, path: string[], value: unknown): Promise<{ ok: boolean; error?: string }>,
   refresh(): Promise<void>
   answerInbox(itemId: string, answer: InboxAnswer): Promise<void>
 

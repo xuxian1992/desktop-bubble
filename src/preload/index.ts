@@ -1,8 +1,8 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
-  Attachment, BubbleApi, BubbleConfig, BubbleState, CapturedImage, DiaryEntryView, DshProbeView,
-  FormFactor, HotkeyAction, IntegrationState, MonitorMode, PerceptionView, RuntimeStatusView,
-  InboxAnswer, Rect, ResizeEdge, Snapshot,
+  Attachment, BubbleApi, BubbleConfig, BubbleState, CapturedImage, DiaryEntryView, DiscoveredModelView,
+  DshProbeView, FormFactor, HotkeyAction, IntegrationState, MonitorMode, PerceptionView,
+  ProviderDetailView, ProviderEntryView, RuntimeStatusView, InboxAnswer, Rect, ResizeEdge, Snapshot,
 } from '../shared/types'
 
 const invoke = ipcRenderer.invoke.bind(ipcRenderer)
@@ -50,6 +50,13 @@ const api: BubbleApi = {
   diagCollect: () => invoke('diag:collect') as Promise<Record<string, unknown>>,
   diagSend: (url: string) => invoke('diag:send', url) as Promise<{ ok: boolean; detail: string }>,
   diagSave: () => invoke('diag:save') as Promise<{ ok: boolean; path: string }>,
+  /** 供应商目录 / 模型自动拉取 / 密钥写入 —— 全部走 dsh 自己的接口 */
+  providerList: () => invoke('provider:list') as Promise<ProviderEntryView[]>,
+  providerDiscover: (ns: string, p: string) => invoke('provider:discover', ns, p) as Promise<{ models: DiscoveredModelView[]; error?: string }>,
+  providerSetKey: (p: ProviderEntryView, v: string) => invoke('provider:setKey', p, v) as Promise<{ ok: boolean; error?: string }>,
+  providerKeyState: (p: ProviderEntryView) => invoke('provider:keyState', p) as Promise<{ configured: boolean; writable: boolean }>,
+  providerDetail: (p: ProviderEntryView) => invoke('provider:detail', p) as Promise<ProviderDetailView>,
+  providerSetField: (ns: string, path: string[], v: unknown) => invoke('provider:setField', ns, path, v) as Promise<{ ok: boolean; error?: string }>,
   refresh: () => invoke('dsh:refresh') as Promise<void>,
   answerInbox: (itemId: string, answer: InboxAnswer) =>
     invoke('dsh:answerInbox', itemId, answer) as Promise<void>,

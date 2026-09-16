@@ -192,6 +192,8 @@ async function boot(): Promise<void> {
 
   // 先读回上次的 web token —— 复用已在跑的 dsh 时，它不会再打印一次
   loadPersistedToken()
+  // ⚠️ `autoLaunchDsh` 这个开关以前【从来没被读过】—— 界面上能关，但关了什么也不会变。
+  //    现在它的语义是：关掉之后只探活、不主动拉起（用户可能自己管着 dsh）。
   await connectDsh()
 }
 
@@ -202,7 +204,9 @@ async function boot(): Promise<void> {
  */
 async function connectDsh(): Promise<boolean> {
   if (!client || !store) return false
-  const status = await ensureRunning(DSH_URL)
+  // 连着跑了几轮的连接尝试：`ensureRunning` 内部会探活 → 等 → 必要时清掉自己的僵尸进程 →
+  // 再决定是否真的 spawn。这里只负责把它的结果如实反映到界面上。
+  const status = await ensureRunning(DSH_URL, loadConfig().autoLaunchDsh !== false)
   store.setBus({
     state: status.state === 'ready' ? 'ready' : 'error',
     url: status.url,
